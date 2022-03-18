@@ -1,3 +1,6 @@
 *.pyc
 __pycache__/
 .idea/
+linker.bat
+src/**/katagames_sdk
+

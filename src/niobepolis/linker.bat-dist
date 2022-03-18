@@ -1,0 +1,8 @@
+@echo off
+d:
+CD d:\OpusMagnum\niobepolis-repo\
+CD src
+CD niobepolis
+MKLINK /D katagames_sdk ..\..\..\katasdk-lean\katagames_sdk
+ECHO "link to katagames_sdk has been added"
+PAUSE

@@ -3,16 +3,18 @@ import re
 import time
 
 import katagames_sdk as katasdk
+katasdk.bootstrap('super_retro')
 
-
-katasdk.bootstrap(1)
 kengi = katasdk.kengi
 pygame = kengi.pygame
 
 
 sbridge = None
 if katasdk.runs_in_web():
-    sbridge = katasdk.import_stellar()
+    sbridge = katasdk.stellar
+
+
+interruption = None  # used to change game
 
 
 # ---------- file IsoMapModel ------------------start
@@ -84,7 +86,6 @@ gamecoords-> isometric small tiles(size of the avatar)
 """
 
 introscree = pygame.image.load(PALIAS['greetings'])
-kengi.core.init('super_retro')
 scr = kengi.core.get_screen()
 VSCR_SIZE = scr.get_size()
 
@@ -142,6 +143,16 @@ def stellar_console_func(subcmd):
         return 'stellar not available in local ctx'
 
 
+def tp(gametag):
+    """
+    Teleport to another world. Use: tp gametag
+    :param gametag:
+    :return:
+    """
+    global interruption
+    interruption = [2, gametag]
+
+
 def add(a, b):
     """
     Simple add Function! Use: add a b
@@ -192,7 +203,8 @@ listing_all_console_func = {  # IMPORTANT REMINDER!!
     "mul": mul,
     "draw": draw,
     "halt": dohalt,
-    "stellar": stellar_console_func
+    "stellar": stellar_console_func,
+    "tp": tp
 }
 # --------------- implem of console functions, docstrings are used for help ------------------END
 
@@ -206,8 +218,10 @@ ingame_console = kengi.console.CustomConsole(
     vari={"A": 100, "B": 200, "C": 300},
     syntax={re_function: console_func},
 
-    fontpath=PALIAS['fontalph'],
-    ftsize=13
+    # ttf font
+    # fontobj=pygame.font.Font(PALIAS['fontalph'], 13)
+    # - new system
+    fontobj=kengi.gui.ImgBasedFont('niobepolis/myassets/gibson0_font.png', (13, 253, 8))
 )
 # ---------- managing the console --------------end
 
@@ -333,6 +347,9 @@ def game_update(infot=None):
                     dy = -1
 
     # logic
+    if interruption is not None:
+        return interruption
+
     my_x += dx
     my_y += dy
 
@@ -383,7 +400,7 @@ def game_update(infot=None):
 
 def game_exit(vmstate=None):
     print(vmstate, 'bye!')
-    kengi.core.cleanup()
+    kengi.quit()
 
 
 # --------------------------------------------

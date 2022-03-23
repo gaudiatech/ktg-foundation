@@ -63,7 +63,7 @@ class IsoMapModel:
 
 PALIAS = {
     'greetings': 'niobepolis/myassets/greetings.png',
-    'fontalph': "niobepolis/myassets/alphbeta.ttf",
+
     'tilefloor': 'niobepolis/myassets/floor-tile.png',
     'gridsystem': 'niobepolis/myassets/grid-system.png',
 
@@ -208,7 +208,7 @@ listing_all_console_func = {  # IMPORTANT REMINDER!!
 }
 # --------------- implem of console functions, docstrings are used for help ------------------END
 
-
+CON_FONT_COLOR = (13, 253, 8)
 ingame_console = kengi.console.CustomConsole(
     kengi.core.get_screen(),
     (0, 0, VSCR_SIZE[0], int(0.9*VSCR_SIZE[1])),  # takes up 90% of the scr height
@@ -218,10 +218,7 @@ ingame_console = kengi.console.CustomConsole(
     vari={"A": 100, "B": 200, "C": 300},
     syntax={re_function: console_func},
 
-    # ttf font
-    # fontobj=pygame.font.Font(PALIAS['fontalph'], 13)
-    # - new system
-    fontobj=kengi.gui.ImgBasedFont('niobepolis/myassets/gibson0_font.png', (13, 253, 8))
+    fontobj=kengi.gui.ImgBasedFont('niobepolis/myassets/gibson0_font.png', CON_FONT_COLOR)  # - using the new ft system
 )
 # ---------- managing the console --------------end
 

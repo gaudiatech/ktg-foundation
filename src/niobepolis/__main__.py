@@ -123,6 +123,16 @@ def _gencb(x):
     browser_wait = False
     ingame_console.output(browser_res)
 
+
+def gamelist():
+    """
+    List all games. Use: gamelist
+    :return:
+    """
+    global glist
+    return "\n".join(glist)
+
+
 def stellar_console_func(subcmd):
     """
     Stellar bridge. Use: stellar test/network/pkey
@@ -175,6 +185,7 @@ def draw(a, b, c):
     scr = kengi.core.get_screen()
     return pygame.draw.circle(scr, (0, 0, 255), (a, b), c, 1)
 
+
 def size():
     """
     Provide screen dim info. Use: size
@@ -204,7 +215,8 @@ listing_all_console_func = {  # IMPORTANT REMINDER!!
     "draw": draw,
     "halt": dohalt,
     "stellar": stellar_console_func,
-    "tp": tp
+    "tp": tp,
+    "gamelist": gamelist
 }
 # --------------- implem of console functions, docstrings are used for help ------------------END
 
@@ -304,7 +316,12 @@ clock = pygame.time.Clock()
 # --------------------------------------------
 #  Game Def
 # --------------------------------------------
+glist = []
 def game_enter(vmstate=None):
+    global glist
+    if vmstate:
+        glist.extend(vmstate.gamelist)
+
     global t_map_changed
     print(vmstate)
     # themap.shuffle()

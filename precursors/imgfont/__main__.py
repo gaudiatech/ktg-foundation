@@ -1,7 +1,7 @@
 import katagames_sdk as katasdk
 
-katasdk.bootstrap(1)
-kengi = katasdk.import_kengi()
+katasdk.bootstrap('super_retro')
+kengi = katasdk.kengi
 pygame = kengi.pygame
 
 
@@ -118,7 +118,7 @@ class Font:
 # -----------------------------
 
 
-kengi.core.init('super_retro')
+# kengi.core.init('super_retro')
 scr = kengi.core.get_screen()
 gameover = False
 ft_obj = ft_obj2 = None
@@ -151,8 +151,8 @@ def game_update(infot=None):
 
 
 def game_exit(vmstate=None):
-    kengi.core.cleanup()
-    print('done')
+    kengi.quit()
+    print('gentle pgm EXIT')
 
 
 if __name__ == '__main__':  # local run

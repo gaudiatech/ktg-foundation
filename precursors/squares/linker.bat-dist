@@ -1,0 +1,9 @@
+@echo off
+d:
+CD d:\OpusMagnum\ktg-foundation\
+CD precursors
+CD squares
+
+MKLINK /D katagames_sdk ..\..\..\katasdk-lean\katagames_sdk
+ECHO "link to katagames_sdk has been added"
+PAUSE

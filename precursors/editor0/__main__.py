@@ -3,13 +3,12 @@ sys.path.append('..')
 
 import os
 import weakref
-
 import katagames_sdk as katasdk
 
 
 kengi = katasdk.bootstrap('old_school')
 pygame = kengi.pygame
-PATH_SRC_FILE = 'editor0/__main__.py' #'roms/niobepolis.py'
+PATH_SRC_FILE = 'editor0/__main__.py'  # this is a super long line of comment just to try out txt wrapping... 'roms/niobepolis.py'
 
 
 class Resources:

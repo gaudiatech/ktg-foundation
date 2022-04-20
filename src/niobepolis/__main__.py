@@ -3,19 +3,17 @@ import re
 import time
 
 import katagames_sdk as katasdk
+
 katasdk.bootstrap('super_retro')
 
 kengi = katasdk.kengi
 pygame = kengi.pygame
 
-
 sbridge = None
 if katasdk.runs_in_web():
     sbridge = katasdk.stellar
 
-
 interruption = None  # used to change game
-
 
 # ---------- file IsoMapModel ------------------start
 OMEGA_TILES = [0, 35, 92, 160, 182, 183, 198, 203]
@@ -59,6 +57,8 @@ class IsoMapModel:
                 x = random.choice(OMEGA_TILES)
                 self._layers[1][i][j] = x
         self._layers[1][2][0] = 92
+
+
 # ---------- file IsoMapModel ------------------end
 
 PALIAS = {
@@ -76,7 +76,6 @@ PALIAS = {
     't203': 'niobepolis/myassets/t203.png',
 }
 
-
 """
 Coords used:
 floorgrid -> 64x32 2D grid
@@ -89,7 +88,6 @@ introscree = pygame.image.load(PALIAS['greetings'])
 scr = kengi.core.get_screen()
 VSCR_SIZE = scr.get_size()
 
-
 # --------------- Extra parsing function --------------------
 # this one lets you call functions like: name(arg1,arg2,...,argn)
 re_function = re.compile(r'(?P<name>\S+)(?P<params>[\(].*[\)])')
@@ -100,7 +98,7 @@ def console_func(console, match):
     if funcname in console.func_calls:
         func = console.func_calls[funcname]
     else:
-        console.output('unknown function '+funcname)
+        console.output('unknown function ' + funcname)
         return
     params = console.convert_token(match.group("params"))
     print(funcname, params)
@@ -117,6 +115,8 @@ def console_func(console, match):
 # --------------- implem of console functions, docstrings are used for help ------------------START
 browser_wait = False
 browser_res = ''
+
+
 def _gencb(x):
     global browser_res, browser_wait, ingame_console
     browser_res = x
@@ -192,7 +192,22 @@ def size():
     """
     global VSCR_SIZE
     w, h = VSCR_SIZE
-    return str(w)+' '+str(h)
+    return str(w) + ' ' + str(h)
+
+
+to_edit = None
+
+
+def cedit(cname):  # -------------------- experimental ----------------
+    """
+    Edit cartridge. Use: edit cartname
+    """
+    global to_edit
+    to_edit = cname
+    return f'...requesting edition {cname}'
+
+
+gameover = False
 
 
 def dohalt():
@@ -215,6 +230,7 @@ listing_all_console_func = {  # IMPORTANT REMINDER!!
     "draw": draw,
     "halt": dohalt,
     "stellar": stellar_console_func,
+    "edit": cedit,
     "tp": tp,
     "gamelist": gamelist
 }
@@ -223,7 +239,7 @@ listing_all_console_func = {  # IMPORTANT REMINDER!!
 CON_FONT_COLOR = (13, 253, 8)
 ingame_console = kengi.console.CustomConsole(
     kengi.core.get_screen(),
-    (0, 0, VSCR_SIZE[0], int(0.9*VSCR_SIZE[1])),  # takes up 90% of the scr height
+    (0, 0, VSCR_SIZE[0], int(0.9 * VSCR_SIZE[1])),  # takes up 90% of the scr height
 
     functions=listing_all_console_func,
     key_calls={},
@@ -236,11 +252,11 @@ ingame_console = kengi.console.CustomConsole(
 
 
 # --------------------------------- temp. test march22 - -
-#tmx_map = kengi.tmx.data.TileMap.load(  # !! needs base64 zlib compression
+# tmx_map = kengi.tmx.data.TileMap.load(  # !! needs base64 zlib compression
 #    'niobepolis/myassets/map.tmx',
 #    'niobepolis/myassets/sync-tileset.tsx',
-#    'niobepolis/myassets/spritesheet.png'
-#)
+#    'assets/(niobepolis)spritesheet.png'
+# )
 # - -
 
 floortile = pygame.image.load(PALIAS['tilefloor'])
@@ -257,13 +273,13 @@ chartile.set_colorkey('#ff00ff')
 # we need to do it in a stupid way,
 # due to how the ROM pseudo-compil works (=>detects raw strings for filepaths, moves assets)
 code2filename = {
-     35: PALIAS['t035'], 
-     92: PALIAS['t092'], 
-    160: PALIAS['t160'], 
-    182: PALIAS['t182'], 
-    183: PALIAS['t183'], 
-    198: PALIAS['t198'], 
-    203: PALIAS['t203'], 
+    35: PALIAS['t035'],
+    92: PALIAS['t092'],
+    160: PALIAS['t160'],
+    182: PALIAS['t182'],
+    183: PALIAS['t183'],
+    198: PALIAS['t198'],
+    203: PALIAS['t203'],
 }
 
 code2tile_map = dict()
@@ -285,7 +301,7 @@ def gridbased_2d_disp(grid_spec, coords, ref_img):
 
 
 def realise_pavage(gfx_elt, offsets=(0, 0)):
-    incx, incy = gfx_elt.get_size()  # 64*32 pour floortile 
+    incx, incy = gfx_elt.get_size()  # 64*32 pour floortile
     for y in range(0, VSCR_SIZE[1], incy):
         for x in range(0, VSCR_SIZE[0], incx):
             scr.blit(gfx_elt, (offsets[0] + x, offsets[1] + y))
@@ -312,15 +328,18 @@ themap = IsoMapModel()
 dx = dy = 0
 clock = pygame.time.Clock()
 
-
 # --------------------------------------------
 #  Game Def
 # --------------------------------------------
 glist = []
+binded_state = None
+
+
 def game_enter(vmstate=None):
-    global glist
+    global glist, binded_state
     if vmstate:
         glist.extend(vmstate.gamelist)
+        binded_state = vmstate
 
     global t_map_changed
     print(vmstate)
@@ -329,7 +348,7 @@ def game_enter(vmstate=None):
 
 
 def game_update(infot=None):
-    global t_map_changed, show_grid, dx, dy, my_x, my_y, gameover
+    global t_map_changed, show_grid, dx, dy, my_x, my_y, gameover, interruption
 
     all_ev = pygame.event.get()
     ingame_console.process_input(all_ev)
@@ -361,6 +380,13 @@ def game_update(infot=None):
                     dy = -1
 
     # logic
+    if gameover:
+        return [1, None]
+
+    if binded_state and (to_edit is not None):
+        binded_state.cedit_arg = to_edit  # commit name of the file to be edited to VMstate
+        interruption = [2, 'editor']
+
     if interruption is not None:
         return interruption
 
@@ -407,9 +433,7 @@ def game_update(infot=None):
     # console draw
     ingame_console.draw()
 
-    kengi.core.display_update()
-    clock.tick(50)
-    return None, None
+    kengi.flip()
 
 
 def game_exit(vmstate=None):
@@ -422,7 +446,6 @@ def game_exit(vmstate=None):
 # --------------------------------------------
 if __name__ == '__main__':
     game_enter()
-    gameover = False
     while not gameover:
         tmp = game_update(None)
         if tmp is not None:

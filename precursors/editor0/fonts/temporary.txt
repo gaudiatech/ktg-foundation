@@ -1,0 +1,7 @@
+temporary FIX:
+
+ to make vmlocal.py work with the editor, copy this fonts folder
+
+inside: 
+
+ runtime-env-webapp/roms/

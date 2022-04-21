@@ -24,6 +24,8 @@ class pyperclip:
         return cls.strv
 
 
+dump_content = None  # can be used to save the current file...
+
 # TODO: let's code a very crude formatting
 #  one can display keywords simply by using a boldface font
 PY_KEYWORDS = (
@@ -874,17 +876,20 @@ class TextEditor:
     # --------------------------------------------------------------------
 
     def handle_keyboard_input(self, pygame_events, pressed_keys) -> None:
-        global kartridge_output, gameover
+        global kartridge_output, gameover, dump_content
 
         for event in pygame_events:
             if event.type == pygame.KEYDOWN:
 
                 # ___ COMBINATION KEY INPUTS ___
                 # Functionality whether something is highlighted or not (highlight all / paste)
-                if (pressed_keys[pygame.K_LCTRL] or pressed_keys[pygame.K_RCTRL]) and event.key == pygame.K_a:
+                ctrl_k_pressed = pressed_keys[pygame.K_LCTRL] or pressed_keys[pygame.K_RCTRL]
+                if ctrl_k_pressed and event.key == pygame.K_a:
                     self.highlight_all()
-                elif (pressed_keys[pygame.K_LCTRL] or pressed_keys[pygame.K_RCTRL]) and event.key == pygame.K_v:
+                elif ctrl_k_pressed and event.key == pygame.K_v:
                     self.handle_highlight_and_paste()
+                elif ctrl_k_pressed and event.key == pygame.K_s:
+                    dump_content = self.get_text_as_string()
 
                 # Functionality for when something is highlighted (cut / copy)
                 elif self.dragged_finished and self.dragged_active:
@@ -1445,6 +1450,12 @@ def game_update(t_info=None):
 
 
 def game_exit(vmstate=None):
+    if dump_content and vmstate:
+        # has to be shared with the VM, too
+
+        # let's hack the .cedit_arg attribute, use it as a return value container
+        vmstate.cedit_arg = katasdk.mt_a + vmstate.cedit_arg + katasdk.mt_b + dump_content
+        print('.cedit_arg hacked!')
     kengi.quit()
     print('sortie de lediteur!')
 

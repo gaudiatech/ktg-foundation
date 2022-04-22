@@ -2,7 +2,7 @@ import math
 import katagames_sdk as katasdk
 
 
-katasdk.bootstrap()
+katasdk.bootstrap('old_school')
 kengi = katasdk.kengi
 pygame = kengi.pygame
 
@@ -25,7 +25,13 @@ class pyperclip:
 
 
 dump_content = None  # can be used to save the current file...
+# pygame-flavored font obj
+# letter_size_Y = 16
+# courier_font = pygame.font.Font('editor/myassets/Courier.ttf', letter_size_Y)
 
+# kengi+sdk flavored font obj
+courier_font = kengi.gui.ImgBasedFont('editor/myassets/gibson1_font.png', (87, 77, 11))
+letter_size_Y = courier_font.get_linesize()
 # TODO: let's code a very crude formatting
 #  one can display keywords simply by using a boldface font
 PY_KEYWORDS = (
@@ -461,6 +467,7 @@ class TextEditor:
         self.scrollbar_down()
 
     def __init__(self, offset_x, offset_y, text_area_width, text_area_height, screen, line_numbers_flag=False):
+        global courier_font
         self.screen = screen
 
         # VISUALS
@@ -472,10 +479,8 @@ class TextEditor:
         self.textAreaHeight = text_area_height
 
         self.conclusionBarHeight = 18
-        self.letter_size_Y = 16
-        self.courier_font = pygame.font.Font('editor/myassets/Courier.ttf', self.letter_size_Y)
 
-        letter_width = self.courier_font.render(" ", self.txt_antialiasing, (0, 0, 0)).get_width()
+        letter_width = courier_font.render(" ", self.txt_antialiasing, (0, 0, 0)).get_width()
         self.letter_size_X = letter_width
 
         self.trennzeichen_image = pygame.image.load('editor/myassets/Trennzeichen.png').convert_alpha()
@@ -484,13 +489,16 @@ class TextEditor:
         self.Trenn_counter = 0
         self.MaxLinecounter = 0
         self.line_string_list = []  # LOGIC: Array of actual Strings
-        self.lineHeight = self.letter_size_Y
+        self.lineHeight = letter_size_Y
 
         # self.maxLines is the variable keeping count how many lines we currently have -
         # in the beginning we fill the entire editor with empty lines.
         self.maxLines = int(math.floor(self.textAreaHeight / self.lineHeight))
         self.showStartLine = 0  # first line (shown at the top of the editor) <- must be zero during init!
-        self.line_gap = 3 + self.letter_size_Y
+
+        linespacing = 2
+        self.line_gap = letter_size_Y + linespacing
+
         self.showable_line_numbers_in_editor = int(math.floor(self.textAreaHeight / self.line_gap))
         print('----', self.showable_line_numbers_in_editor)
 
@@ -516,7 +524,8 @@ class TextEditor:
         # TEXT COORDINATES
         self.chosen_LineIndex = 0
         self.chosen_LetterIndex = 0
-        self.yline_start = self.editor_offset_Y + 3
+        self.yline_start = self.editor_offset_Y + 1  # +1 is here so we can align line numbers & txtcontent surfaces
+
         self.yline = self.editor_offset_Y
         self.xline_start_offset = 28
         if self.displayLineNumbers:
@@ -527,7 +536,7 @@ class TextEditor:
             self.xline = self.editor_offset_X
 
         # CURSOR - coordinates for displaying the caret while typing
-        self.cursor_Y = self.yline_start - 3
+        self.cursor_Y = self.editor_offset_Y
         self.cursor_X = self.xline_start
 
         # click down - coordinates used to identify start-point of drag
@@ -668,9 +677,10 @@ class TextEditor:
         bg_height = self.textAreaHeight
         pygame.draw.rect(self.screen, self.codingBackgroundColor, (bg_left, bg_top, bg_width, bg_height))
 
-    def render_line_numbers(self) -> None:
+    def render_line_numbers(self):
         """
-        While background rendering is done for all "line-slots" (to overpaint remaining "old" numbers without lines)
+        While background rendering is done for all "line-slots"
+        (to overpaint remaining "old" numbers without lines)
         we render line-numbers only for existing string-lines.
         """
         if self.displayLineNumbers and self.rerenderLineNumbers:
@@ -680,12 +690,12 @@ class TextEditor:
 
                 # background
                 r = (self.editor_offset_X, line_numbers_y, self.lineNumberWidth, self.line_gap)
-                pygame.draw.rect(self.screen, self.lineNumberBackgroundColor, r)
+                pygame.draw.rect(self.screen, self.lineNumberBackgroundColor, r)  # to debug use: ,1) after r
 
                 # line number
                 if x < self.get_showable_lines():
                     # x + 1 in order to start with line 1 (only display, logical it's the 0th item in the list
-                    text = self.courier_font.render(str(x + 1).zfill(2), self.txt_antialiasing, self.lineNumberColor)
+                    text = courier_font.render(str(x + 1).zfill(2), self.txt_antialiasing, self.lineNumberColor)
                     text_rect = text.get_rect()
                     text_rect.center = pygame.Rect(r).center
                     self.screen.blit(text, text_rect)  # render on center of bg block
@@ -705,7 +715,7 @@ class TextEditor:
         for line_list in dicts[first_line: last_line]:
             xcoord = self.xline_start
             for a_dict in line_list:
-                surface = self.courier_font.render(a_dict['chars'], self.txt_antialiasing, a_dict['color'])  # create surface
+                surface = courier_font.render(a_dict['chars'], self.txt_antialiasing, a_dict['color'])  # create surface
                 self.screen.blit(surface, (xcoord, self.yline))  # blit surface onto screen
                 xcoord = xcoord + (len(a_dict['chars']) * self.letter_size_X)  # next line-part prep
 
@@ -773,6 +783,7 @@ class TextEditor:
                 self.highlight_lines(line_start, letter_start, line_end, letter_end)  # Actual highlighting
 
     def display_editor(self, pygame_events, pressed_keys, mouse_x, mouse_y, mouse_pressed):
+        global gameover
         # needs to be called within a while loop to be able to catch key/mouse input and update visuals throughout use.
         self.cycleCounter = self.cycleCounter + 1
         # first iteration
@@ -784,8 +795,7 @@ class TextEditor:
 
         for event in pygame_events:  # handle QUIT operation
             if event.type == pygame.QUIT:
-                pygame.quit()
-                exit()
+                gameover = True
 
         self.handle_keyboard_input(pygame_events, pressed_keys)
         self.handle_mouse_input(pygame_events, mouse_x, mouse_y, mouse_pressed)
@@ -1389,10 +1399,10 @@ def game_enter(vmstate=None):
     SCR_SIZE = screen.get_size()
     e_manager = kengi.event.EventManager.instance()
 
-    offset_X = 50  # offset from the left border of the pygame window
-    offset_Y = 50  # offset from the top border of the pygame window
-    textAreaWidth = 760
-    textAreaHeight = 362
+    offset_X = 0  # offset from the left border of the pygame window
+    offset_Y = 13  # offset from the top border of the pygame window
+    textAreaWidth = 960//2
+    textAreaHeight = 540//2-16
 
     # Instantiation
     editor = TextEditor(offset_X, offset_Y, textAreaWidth, textAreaHeight, screen, True)
@@ -1410,8 +1420,7 @@ def game_enter(vmstate=None):
     else:
         py_code = dummy_py_code  # just a sample, like just like a LoremIpsum.py ...
 
-    ft = pygame.font.Font('editor/myassets/Courier.ttf', 23)
-    petite_etq = ft.render(f'opened file= {fileinfo}', False, (0, 250, 0))
+    petite_etq = courier_font.render(f'opened file= {fileinfo}', False, (0, 250, 0))
 
     # another way to do it --------------
     # ajout dimanche 10.04
@@ -1437,7 +1446,8 @@ def game_update(t_info=None):
     # capture input
     pygame_events = pygame.event.get()
     pressed_keys = pygame.key.get_pressed()
-    mouse_x, mouse_y = pygame.mouse.get_pos()
+
+    mouse_x, mouse_y = kengi.core.conv_to_vscreen(*pygame.mouse.get_pos())
     mouse_pressed = pygame.mouse.get_pressed()
 
     # display editor functionality once per loop

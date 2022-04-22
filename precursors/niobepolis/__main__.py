@@ -220,10 +220,11 @@ def dohalt():
 
 
 listing_all_console_func = {  # IMPORTANT REMINDER!!
-    # All func listed here need to RETURN smth
-    # als need to have 1 line of docstring, and include a «. Use: xxx xxx yy» part
-    # at the end,
-    # otherwise the cmd "help commandname" would crash the soft!
+    # All functions listed here need to RETURN smth and they
+    # need to have 1 line of docstring, and include a
+    # "Use: xxx aa bb"
+    # part at the end, otherwise the cmd "help cmd_name" would crash the soft!
+
     "size": size,
     "add": add,
     "mul": mul,
@@ -246,7 +247,7 @@ ingame_console = kengi.console.CustomConsole(
     vari={"A": 100, "B": 200, "C": 300},
     syntax={re_function: console_func},
 
-    fontobj=kengi.gui.ImgBasedFont('niobepolis/myassets/gibson0_font.png', CON_FONT_COLOR)  # - using the new ft system
+    fontobj=kengi.gui.ImgBasedFont('niobepolis/myassets/gibson1_font.png', CON_FONT_COLOR)  # - using the new ft system
 )
 # ---------- managing the console --------------end
 

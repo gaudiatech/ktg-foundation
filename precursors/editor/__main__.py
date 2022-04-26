@@ -890,6 +890,7 @@ class TextEditor:
 
         for event in pygame_events:
             if event.type == pygame.KEYDOWN:
+                # alt_pressed = pressed_keys[pygame.K_RALT] or pressed_keys[pygame.K_LALT]
 
                 # ___ COMBINATION KEY INPUTS ___
                 # Functionality whether something is highlighted or not (highlight all / paste)
@@ -936,6 +937,8 @@ class TextEditor:
                     # This covers all letters and numbers (not those on numpad).
                     elif len(pygame.key.name(event.key)) == 1:
                         self.insert_unicode(event.unicode)
+                    elif event.unicode == '_':
+                        self.insert_unicode('_')
 
                     # ___ NUMPAD KEYS ___
                     # for the numbers, numpad must be activated (mod = 4096)

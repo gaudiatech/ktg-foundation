@@ -25,9 +25,20 @@ class pyperclip:
 
 
 dump_content = None  # can be used to save the current file...
+disp_save_ico = None  # contains info 'bout time when it needs display
+SAVE_ICO_LIFEDUR = 0.77  # sec
+ico_surf = pygame.image.load('editor/myassets/saveicon.png')
+tt = ico_surf.get_size()
+scr_size = kengi.core.get_screen().get_size()
+icosurf_pos = ((scr_size[0] - tt[0])//2, (scr_size[1] - tt[1])//2)
+
 # pygame-flavored font obj
 # letter_size_Y = 16
-# courier_font = pygame.font.Font('editor/myassets/Courier.ttf', letter_size_Y)
+#
+# this was removed:
+# courier_font = pygame.font.Font('
+# editorxxxmyassetsxxxCourier.ttf', letter_size_Y
+# )
 
 # kengi+sdk flavored font obj
 courier_font = kengi.gui.ImgBasedFont('editor/myassets/gibson1_font.png', (87, 77, 11))
@@ -500,7 +511,8 @@ class TextEditor:
         self.line_gap = letter_size_Y + linespacing
 
         self.showable_line_numbers_in_editor = int(math.floor(self.textAreaHeight / self.line_gap))
-        print('----', self.showable_line_numbers_in_editor)
+
+        #print('----', self.showable_line_numbers_in_editor)
 
         for i in range(self.maxLines):  # from 0 to maxLines:
             self.line_string_list.append("")  # Add a line
@@ -782,7 +794,7 @@ class TextEditor:
 
                 self.highlight_lines(line_start, letter_start, line_end, letter_end)  # Actual highlighting
 
-    def display_editor(self, pygame_events, pressed_keys, mouse_x, mouse_y, mouse_pressed):
+    def display_editor(self, pygame_events, pressed_keys, mouse_x, mouse_y, mouse_pressed, tinfo=None):
         global gameover
         # needs to be called within a while loop to be able to catch key/mouse input and update visuals throughout use.
         self.cycleCounter = self.cycleCounter + 1
@@ -797,7 +809,7 @@ class TextEditor:
             if event.type == pygame.QUIT:
                 gameover = True
 
-        self.handle_keyboard_input(pygame_events, pressed_keys)
+        self.handle_keyboard_input(pygame_events, pressed_keys, tinfo)
         self.handle_mouse_input(pygame_events, mouse_x, mouse_y, mouse_pressed)
 
         # RENDERING 1 - Background objects
@@ -885,8 +897,8 @@ class TextEditor:
     #   KEYB MANAGEMENT
     # --------------------------------------------------------------------
 
-    def handle_keyboard_input(self, pygame_events, pressed_keys) -> None:
-        global kartridge_output, gameover, dump_content
+    def handle_keyboard_input(self, pygame_events, pressed_keys, tinfo=None) -> None:
+        global kartridge_output, gameover, dump_content, disp_save_ico
 
         for event in pygame_events:
             if event.type == pygame.KEYDOWN:
@@ -900,6 +912,8 @@ class TextEditor:
                 elif ctrl_k_pressed and event.key == pygame.K_v:
                     self.handle_highlight_and_paste()
                 elif ctrl_k_pressed and event.key == pygame.K_s:
+                    print('**SAVE detected**')
+                    disp_save_ico = tinfo + SAVE_ICO_LIFEDUR
                     dump_content = self.get_text_as_string()
 
                 # Functionality for when something is highlighted (cut / copy)
@@ -916,7 +930,7 @@ class TextEditor:
                     self.reset_text_area_to_caret()  # reset visual area to include line of caret if necessary
                     self.chosen_LetterIndex = int(self.chosen_LetterIndex)
 
-                    print("event", event)
+                    #print("event", event)
 
                     # Detect tapping/holding of the "DELETE" and "BACKSPACE" key while something is highlighted
                     if self.dragged_finished and self.dragged_active and \
@@ -940,10 +954,12 @@ class TextEditor:
                     elif event.unicode == '_':
                         self.insert_unicode('_')
 
+                    # TODO enable numpad keys again, once the VM is clean
                     # ___ NUMPAD KEYS ___
                     # for the numbers, numpad must be activated (mod = 4096)
-                    elif event.mod == 4096 and 1073741913 <= event.key <= 1073741922:
-                        self.insert_unicode(event.unicode)
+                    #elif event.mod == 4096 and 1073741913 <= event.key <= 1073741922:
+                    #    self.insert_unicode(event.unicode)
+
                     # all other numpad keys can be triggered with & without mod
                     elif event.key in [pygame.K_KP_PERIOD, pygame.K_KP_DIVIDE, pygame.K_KP_MULTIPLY, pygame.K_KP_MINUS,
                                        pygame.K_KP_PLUS, pygame.K_KP_EQUALS]:
@@ -1445,7 +1461,7 @@ def game_enter(vmstate=None):
 
 
 def game_update(t_info=None):
-    global p_event, gameover, editor, kartridge_output
+    global p_event, gameover, editor, kartridge_output, disp_save_ico
     # capture input
     pygame_events = pygame.event.get()
     pressed_keys = pygame.key.get_pressed()
@@ -1454,12 +1470,17 @@ def game_update(t_info=None):
     mouse_pressed = pygame.mouse.get_pressed()
 
     # display editor functionality once per loop
-    editor.display_editor(pygame_events, pressed_keys, mouse_x, mouse_y, mouse_pressed)
+    editor.display_editor(pygame_events, pressed_keys, mouse_x, mouse_y, mouse_pressed, t_info)
+
+    if disp_save_ico:
+        if t_info > disp_save_ico:
+            disp_save_ico = None
+        screen.blit(ico_surf, icosurf_pos)
+    screen.blit(petite_etq, (0, 0))
+    kengi.flip()
+
     if kartridge_output:
         return kartridge_output
-    screen.blit(petite_etq, (0, 0))
-    # update pygame window
-    kengi.flip()
 
 
 def game_exit(vmstate=None):
@@ -1474,8 +1495,9 @@ def game_exit(vmstate=None):
 
 
 # -------------------------------------------- corps de test -----------
+import time
 if __name__ == '__main__':
     game_enter()
     while not gameover:  # pygame-loop
-        game_update()
+        game_update(time.time())
     game_exit()

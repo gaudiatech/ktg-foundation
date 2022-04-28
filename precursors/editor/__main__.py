@@ -987,8 +987,10 @@ class TextEditor:
                         if event.key not in [pygame.K_RSHIFT, pygame.K_LSHIFT, pygame.K_DELETE,
                                              pygame.K_BACKSPACE, pygame.K_CAPSLOCK, pygame.K_LCTRL, pygame.K_RCTRL]:
                             # We handled the keys separately
-                            # Capslock is apparently implicitly handled when using it in combination
-                            print('**WARNING** No implementation for key: " + str(pygame.key.name(event.key)) ')#, Warning)
+                            # Capslock is apparently implicitly handled
+                            # when using it in combination
+                            print('*WARNING* No implementation for key: ', end='')
+                            print(pygame.key.name(event.key))
 
     def insert_unicode(self, unicode) -> None:
         self.line_string_list[self.chosen_LineIndex] = self.line_string_list[self.chosen_LineIndex][

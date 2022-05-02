@@ -1,6 +1,7 @@
 import math
-import katagames_sdk as katasdk
+import time
 
+import katagames_sdk as katasdk
 
 katasdk.bootstrap('old_school')
 kengi = katasdk.kengi
@@ -480,6 +481,7 @@ class TextEditor:
     def __init__(self, offset_x, offset_y, text_area_width, text_area_height, screen, line_numbers_flag=False):
         global courier_font
         self.screen = screen
+        self._prev_mouse_x, self._prev_mouse_y = 0, 0
 
         # VISUALS
         self.txt_antialiasing = 0
@@ -794,15 +796,15 @@ class TextEditor:
 
                 self.highlight_lines(line_start, letter_start, line_end, letter_end)  # Actual highlighting
 
-    def display_editor(self, pygame_events, pressed_keys, mouse_x, mouse_y, mouse_pressed, tinfo=None):
+    def use_events(self, pygame_events, pressed_keys, tinfo=None):  # mouse_x, mouse_y, mouse_pressed, tinfo=None
         global gameover
         # needs to be called within a while loop to be able to catch key/mouse input and update visuals throughout use.
         self.cycleCounter = self.cycleCounter + 1
         # first iteration
+        tmp = (self.editor_offset_X, self.editor_offset_Y, self.textAreaWidth, self.textAreaHeight)
         if self.firstiteration_boolean:
             # paint entire area to avoid pixel error beneath line numbers
-            pygame.draw.rect(self.screen, self.codingBackgroundColor,
-                             (self.editor_offset_X, self.editor_offset_Y, self.textAreaWidth, self.textAreaHeight))
+            pygame.draw.rect(self.screen, self.codingBackgroundColor, tmp)
             self.firstiteration_boolean = False
 
         for event in pygame_events:  # handle QUIT operation
@@ -810,14 +812,19 @@ class TextEditor:
                 gameover = True
 
         self.handle_keyboard_input(pygame_events, pressed_keys, tinfo)
+
+        mouse_pressed = pygame.mouse.get_pressed()
+        mouse_x, mouse_y = kengi.core.proj_to_vscreen(pygame.mouse.get_pos())
+        self._prev_mouse_x, self._prev_mouse_y = mouse_x, mouse_y
         self.handle_mouse_input(pygame_events, mouse_x, mouse_y, mouse_pressed)
 
+    def render_editor(self):
         # RENDERING 1 - Background objects
         self.render_background_coloring()
         self.render_line_numbers()
 
         # RENDERING 2 - Lines
-        self.render_highlight(mouse_x, mouse_y)
+        self.render_highlight(self._prev_mouse_x, self._prev_mouse_y)
 
         # single-color text
         list_of_dicts = self.get_single_color_dicts()
@@ -1414,24 +1421,29 @@ kartridge_output = None
 petite_etq = None  # for test purposes
 
 
+EngineEvTypes = kengi.event.EngineEvTypes
+
+
+class CustomGameTicker(kengi.event.CogObj):
+    def __init__(self):
+        self.lu_event = kengi.event.Cgmevent(EngineEvTypes.LOGICUPDATE, curr_t=None)
+        self.paint_event = kengi.event.Cgmevent(EngineEvTypes.PAINT, screen=kengi.get_surface())
+
+
 def game_enter(vmstate=None):
-    global screen, SCR_SIZE, e_manager, lu_event, p_event, editor, petite_etq
+    global screen, SCR_SIZE, editor, petite_etq
     screen = kengi.core.get_screen()
     SCR_SIZE = screen.get_size()
-    e_manager = kengi.event.EventManager.instance()
-
     offset_X = 0  # offset from the left border of the pygame window
-    offset_Y = 13  # offset from the top border of the pygame window
-    textAreaWidth = 960//2
-    textAreaHeight = 540//2-16
+    offset_Y = 10  # offset from the top border of the pygame window
 
     # Instantiation
-    editor = TextEditor(offset_X, offset_Y, textAreaWidth, textAreaHeight, screen, True)
+    editor = TextEditor(offset_X, offset_Y, SCR_SIZE[0], SCR_SIZE[1]-offset_Y, screen, True)
     # TX.set_line_numbers(True)  # if you wish to change flag afterwards
 
     # set content for the editor
     fileinfo = '?'
-    if vmstate:  # on peut pogner une cible a editer!
+    if vmstate and vmstate.cedit_arg is not None:  # on peut pogner une cible a editer!
         print('***** editing file ******* {}'.format(vmstate.cedit_arg))
         fileinfo = vmstate.cedit_arg
         # AJOUT mercredi 20/04/22 ca peut que marcher en local cela!
@@ -1463,26 +1475,21 @@ def game_enter(vmstate=None):
 
 
 def game_update(t_info=None):
-    global p_event, gameover, editor, kartridge_output, disp_save_ico
-    # capture input
-    pygame_events = pygame.event.get()
-    pressed_keys = pygame.key.get_pressed()
+    global disp_save_ico, kartridge_output
+    editor.use_events(pygame.event.get(), pygame.key.get_pressed(), t_info)
 
-    mouse_x, mouse_y = kengi.core.conv_to_vscreen(*pygame.mouse.get_pos())
-    mouse_pressed = pygame.mouse.get_pressed()
+    editor.render_editor()
 
-    # display editor functionality once per loop
-    editor.display_editor(pygame_events, pressed_keys, mouse_x, mouse_y, mouse_pressed, t_info)
+    if kartridge_output:
+        return kartridge_output
 
     if disp_save_ico:
         if t_info > disp_save_ico:
             disp_save_ico = None
         screen.blit(ico_surf, icosurf_pos)
     screen.blit(petite_etq, (0, 0))
-    kengi.flip()
 
-    if kartridge_output:
-        return kartridge_output
+    kengi.flip()
 
 
 def game_exit(vmstate=None):
@@ -1497,7 +1504,6 @@ def game_exit(vmstate=None):
 
 
 # -------------------------------------------- corps de test -----------
-import time
 if __name__ == '__main__':
     game_enter()
     while not gameover:  # pygame-loop

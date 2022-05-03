@@ -4,15 +4,12 @@ import time
 
 import katagames_sdk as katasdk
 
-katasdk.bootstrap('super_retro')
+
+katasdk.bootstrap()
 
 kengi = katasdk.kengi
-pygame = kengi.pygame
 
-sbridge = None
-if katasdk.runs_in_web():
-    sbridge = katasdk.stellar
-
+pygame = sbridge = None
 interruption = None  # used to change game
 
 # ---------- file IsoMapModel ------------------start
@@ -76,17 +73,16 @@ PALIAS = {
     't203': 'niobepolis/myassets/t203.png',
 }
 
-"""
-Coords used:
-floorgrid -> 64x32 2D grid
-chargrid  -> 32x16 2D grid
-mapcoords -> isometric large tiles(size of a floor element)
-gamecoords-> isometric small tiles(size of the avatar)
-"""
 
-introscree = pygame.image.load(PALIAS['greetings'])
-scr = kengi.core.get_screen()
-VSCR_SIZE = scr.get_size()
+# Coords used:
+# floorgrid -> 64x32 2D grid
+# chargrid  -> 32x16 2D grid
+# mapcoords -> isometric large tiles(size of a floor element)
+# gamecoords-> isometric small tiles(size of the avatar)
+
+
+introscree = scr = vscr_size = None
+
 
 # --------------- Extra parsing function --------------------
 # this one lets you call functions like: name(arg1,arg2,...,argn)
@@ -190,8 +186,8 @@ def size():
     """
     Provide screen dim info. Use: size
     """
-    global VSCR_SIZE
-    w, h = VSCR_SIZE
+    global vscr_size
+    w, h = vscr_size
     return str(w) + ' ' + str(h)
 
 
@@ -238,37 +234,20 @@ listing_all_console_func = {  # IMPORTANT REMINDER!!
 # --------------- implem of console functions, docstrings are used for help ------------------END
 
 CON_FONT_COLOR = (13, 253, 8)
-ingame_console = kengi.console.CustomConsole(
-    kengi.core.get_screen(),
-    (0, 0, VSCR_SIZE[0], int(0.9 * VSCR_SIZE[1])),  # takes up 90% of the scr height
-
-    functions=listing_all_console_func,
-    key_calls={},
-    vari={"A": 100, "B": 200, "C": 300},
-    syntax={re_function: console_func},
-
-    fontobj=kengi.gui.ImgBasedFont('niobepolis/myassets/gibson1_font.png', CON_FONT_COLOR)  # - using the new ft system
-)
+ingame_console = None
 # ---------- managing the console --------------end
 
 
 # --------------------------------- temp. test march22 - -
 # tmx_map = kengi.tmx.data.TileMap.load(  # !! needs base64 zlib compression
-#    'niobepolis/myassets/map.tmx',
-#    'niobepolis/myassets/sync-tileset.tsx',
-#    'assets/(niobepolis)spritesheet.png'
+#    'fuuuuuuu-map.tmx',
+#    'fuuuuuuu-sync-tileset.tsx',
+#    'fuuuuuuu-spritesheet.png'
 # )
 # - -
 
-floortile = pygame.image.load(PALIAS['tilefloor'])
-floortile.set_colorkey('#ff00ff')
-# TODO fix the SDK so this line can work
-# floortile.set_alpha(128)
-
-chartile = pygame.image.load(PALIAS['gridsystem'])
-chartile.set_colorkey('#ff00ff')
-# TODO fix sdk then uncoment this line..
-# chartile.set_alpha(128)
+floortile = None
+chartile = None
 
 # - charge tuiles syndicate, exploite un mapping code <> surface contenant tile image -
 # we need to do it in a stupid way,
@@ -282,13 +261,14 @@ code2filename = {
     198: PALIAS['t198'],
     203: PALIAS['t203'],
 }
-
 code2tile_map = dict()
-for code, fn in code2filename.items():
-    code2tile_map[code] = pygame.image.load(fn)
+def _loadstuff():
+    for code, fn in code2filename.items():
+        code2tile_map[code] = pygame.image.load(fn)
 
-for obj in code2tile_map.values():
-    obj.set_colorkey('#ff00ff')
+    for obj in code2tile_map.values():
+        obj.set_colorkey('#ff00ff')
+
 CODE_GRASS = 203
 BG_COLOR = (40, 40, 68)
 my_x, my_y = 0, 0  # comme un offset purement 2d -> utile pr camera
@@ -303,8 +283,8 @@ def gridbased_2d_disp(grid_spec, coords, ref_img):
 
 def realise_pavage(gfx_elt, offsets=(0, 0)):
     incx, incy = gfx_elt.get_size()  # 64*32 pour floortile
-    for y in range(0, VSCR_SIZE[1], incy):
-        for x in range(0, VSCR_SIZE[0], incx):
+    for y in range(0, vscr_size[1], incy):
+        for x in range(0, vscr_size[0], incx):
             scr.blit(gfx_elt, (offsets[0] + x, offsets[1] + y))
 
 
@@ -327,7 +307,7 @@ def conv_map_coords_floorgrid(u, v, z):
 t_map_changed = None
 themap = IsoMapModel()
 dx = dy = 0
-clock = pygame.time.Clock()
+clock = None
 
 # --------------------------------------------
 #  Game Def
@@ -336,11 +316,47 @@ glist = []
 binded_state = None
 
 
-def game_enter(vmstate=None):
-    global glist, binded_state
-    if vmstate:
-        glist.extend(vmstate.gamelist)
-        binded_state = vmstate
+def game_enter(vmstate):
+    global glist, binded_state, pygame, \
+        introscree, scr, vscr_size, ingame_console, floortile, chartile, clock, sbridge
+
+    katasdk.set_mode('super_retro')
+    pygame = kengi.pygame
+
+    introscree = pygame.image.load(PALIAS['greetings'])
+    scr = kengi.core.get_screen()
+    vscr_size = scr.get_size()
+
+    # init vars
+    if katasdk.runs_in_web():
+        sbridge = katasdk.stellar
+    if vmstate.gamelist is None:
+        vmstate.gamelist = list()
+    ingame_console = kengi.console.CustomConsole(
+        kengi.core.get_screen(),
+        (0, 0, vscr_size[0], int(0.9 * vscr_size[1])),  # takes up 90% of the scr height
+
+        functions=listing_all_console_func,
+        key_calls={},
+        vari={"A": 100, "B": 200, "C": 300},
+        syntax={re_function: console_func},
+
+        fontobj=kengi.gui.ImgBasedFont('niobepolis/myassets/gibson1_font.png', CON_FONT_COLOR)
+        # - using the new ft system
+    )
+    floortile = pygame.image.load(PALIAS['tilefloor'])
+    floortile.set_colorkey('#ff00ff')
+
+    chartile = pygame.image.load(PALIAS['gridsystem'])
+    chartile.set_colorkey('#ff00ff')
+
+    _loadstuff()
+
+    clock = pygame.time.Clock()
+    # - fin init vars
+
+    glist.extend(vmstate.gamelist)
+    binded_state = vmstate
 
     global t_map_changed
     print(vmstate)
@@ -437,7 +453,7 @@ def game_update(infot=None):
     kengi.flip()
 
 
-def game_exit(vmstate=None):
+def game_exit(vmstate):
     print(vmstate, 'bye!')
     kengi.quit()
 
@@ -446,10 +462,10 @@ def game_exit(vmstate=None):
 #  Entry pt, local ctx
 # --------------------------------------------
 if __name__ == '__main__':
-    game_enter()
+    game_enter(katasdk.vmstate)
     while not gameover:
-        tmp = game_update(None)
-        if tmp is not None:
-            if tmp[0] == 1 or tmp[0] == 2:
+        uresult = game_update(None)
+        if uresult is not None:
+            if 0 < uresult[0] < 3:
                 gameover = True
-    game_exit()
+    game_exit(katasdk.vmstate)

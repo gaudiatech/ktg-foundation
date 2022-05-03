@@ -1,13 +1,7 @@
 import random
 
-import katagames_sdk as katasdk
-
-
-katasdk.bootstrap('old_school')
-kengi = katasdk.kengi
-NEXT_GAMETAG = 'mousetester'
-pygame = kengi.pygame
-EngineEvTypes = kengi.event.EngineEvTypes
+katasdk = kengi = pygame = EngineEvTypes = None
+NEXT_GAMETAG = 'niobepolis'
 W, H = 960 // 2, 540 // 2
 carres = list()
 assoc_obj_position = dict()
@@ -54,13 +48,20 @@ class SharedGstate:
         self.clock = pygame.time.Clock()
 
 
-gstate = SharedGstate()
+gstate = None
 
 
 # ----------------------- functions that manage the game --------------
-def game_enter(vm_state=None):
-    global gstate
-    pass
+def game_enter(vm_state):
+    global katasdk, kengi, pygame, EngineEvTypes, gstate
+    katasdk = vm_state.katasdk
+
+    katasdk.set_mode('old_school')
+    kengi = katasdk.kengi
+    EngineEvTypes = kengi.event.EngineEvTypes
+    pygame = kengi.pygame
+
+    gstate = SharedGstate()
 
 
 def handle_event(ev_obj, shared_st):
@@ -92,7 +93,7 @@ def game_update(infot=None):
     for ev in pygame.event.get():
         handle_event(ev, gstate)
     if gstate.gameover:
-        return [1, None]
+        return [2, NEXT_GAMETAG]
 
     # draw the bg
     gstate.screen.fill((77, 70, 180))
@@ -108,12 +109,18 @@ def game_exit(vm_state=None):
     kengi.quit()
 
 
+# --------------------------------------------
+#  Entry pt, local ctx
+# --------------------------------------------
 if __name__ == '__main__':
-    exitprog = False
-    game_enter()
-    while not exitprog:
-        tmp = game_update(None)
-        if tmp is not None:
-            if tmp[0] == 1 or tmp[0] == 2:
-                exitprog = True
-    game_exit()
+    import katagames_sdk as _katasdk
+    _katasdk.bootstrap()
+    vms = _katasdk.vmstate
+    vms.katasdk = _katasdk  # brainfuck. Seems we have no choice tho, sorry
+    game_enter(vms)
+    while not gstate.gameover:
+        uresult = game_update(None)
+        if uresult is not None:
+            if 0 < uresult[0] < 3:
+                gameover = True
+    game_exit(vms)

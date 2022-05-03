@@ -1,12 +1,8 @@
 import math
-import time
-
 import katagames_sdk as katasdk
-
-katasdk.bootstrap('old_school')
+katasdk.bootstrap()
 kengi = katasdk.kengi
-EngineEvTypes = kengi.event.EngineEvTypes
-pygame = kengi.pygame
+EngineEvTypes = None
 
 
 # - constants
@@ -824,7 +820,7 @@ class TextEditor:  # (kengi.event.EventReceiver):
     #   KEYB MANAGEMENT
     # --------------------------------------------------------------------
 
-    def handle_keyboard_input(self, pygame_events, pressed_keys, sharedstuff, tinfo=None):
+    def handle_keyboard_input(self, pygame_events, pressed_keys, shstuff, tinfo=None):
 
         for event in pygame_events:
             if event.type == pygame.KEYDOWN:
@@ -833,7 +829,7 @@ class TextEditor:  # (kengi.event.EventReceiver):
 
                 # how to exit prog
                 if event.key == pygame.K_ESCAPE:
-                    sharedstuff.kartridge_output = [2, 'niobepolis']
+                    shstuff.kartridge_output = [2, 'niobepolis']
                     return True
 
                 # ___ COMBINATION KEY INPUTS ___
@@ -844,8 +840,9 @@ class TextEditor:  # (kengi.event.EventReceiver):
                     self.handle_highlight_and_paste()
                 elif ctrl_k_pressed and event.key == pygame.K_s:
                     print('**SAVE detected**')
-                    sharedstuff.disp_save_ico = tinfo + SAVE_ICO_LIFEDUR
-                    sharedstuff.dump_content = self.get_text_as_string()
+                    shstuff.disp_save_ico = tinfo + SAVE_ICO_LIFEDUR
+                    shstuff\
+                        .dump_content = self.get_text_as_string()
 
                 # Functionality for when something is highlighted (cut / copy)
                 elif self.dragged_finished and self.dragged_active:
@@ -1405,20 +1402,18 @@ class Sharedstuff:
         self.dirtymodel = None
 
 
-# - global variables
-ico_surf = pygame.image.load('editor/myassets/saveicon.png')
-tt = ico_surf.get_size()
-scr_size = kengi.core.get_screen().get_size()
-icosurf_pos = ((scr_size[0] - tt[0])//2, (scr_size[1] - tt[1])//2)
+ico_surf = None
+scr_size = None
+icosurf_pos = None
 e_manager = None
 lu_event = p_event = None
 editor_text_content = ''
 formatedtxt_obj = None
 gameover = False
-sharedstuff = Sharedstuff()
+sharedstuff = None
 
 
-class CustomGameTicker(kengi.event.CogObj):
+class CustomGameTicker:
     def __init__(self):
         self.lu_event = kengi.event.CgmEvent(EngineEvTypes.LOGICUPDATE, curr_t=None)
         self.paint_event = kengi.event.CgmEvent(EngineEvTypes.PAINT, screen=kengi.get_surface())
@@ -1430,15 +1425,24 @@ class CustomGameTicker(kengi.event.CogObj):
         self.manager.update()
 
 
-ticker = CustomGameTicker()
+ticker = None
 
 
 # - functions for the web -
-def game_enter(vmstate=None):
-    global sharedstuff, ticker
+def game_enter(vmstate):
+    global pygame, EngineEvTypes, sharedstuff, ticker, EngineEvTypes, ico_surf, scr_size, icosurf_pos
+    katasdk.set_mode('old_school')
+    sharedstuff = Sharedstuff()
 
-    sharedstuff.screen = kengi.core.get_screen()
-    ssize = sharedstuff.screen.get_size()
+    pygame = kengi.pygame
+    EngineEvTypes = kengi.event.EngineEvTypes
+    sharedstuff.screen = kengi.get_surface()
+    scr_size = sharedstuff.screen.get_size()
+
+    ico_surf = pygame.image.load('editor/myassets/saveicon.png')
+    tt = ico_surf.get_size()
+    icosurf_pos = ((scr_size[0]-tt[0])//2, (scr_size[1]-tt[1])//2)
+
     offset_x = 0  # offset from the left border of the pygame window
     offset_y = 10  # offset from the top border of the pygame window
 
@@ -1475,7 +1479,7 @@ def game_enter(vmstate=None):
     # ------------
 
     sharedstuff.dirtymodel = TextEditor(
-        offset_x, offset_y, ssize[0], ssize[1]-offset_y, kengi.get_surface(), line_numbers_flag=True
+        offset_x, offset_y, scr_size[0], scr_size[1]-offset_y, kengi.get_surface(), line_numbers_flag=True
     )
     # sharedstuff.dirtymodel.turn_on()
 
@@ -1508,9 +1512,9 @@ def game_update(t_info=None):
     kengi.flip()
 
 
-def game_exit(vmstate=None):
+def game_exit(vmstate):
     global sharedstuff
-    if sharedstuff.dump_content and vmstate:
+    if vmstate.cedit_arg is not None and sharedstuff.dump_content is not None:
         # has to be shared with the VM, too
         # let's hack the .cedit_arg attribute, use it as a return value container
         vmstate.cedit_arg = katasdk.mt_a + vmstate.cedit_arg + katasdk.mt_b + sharedstuff.dump_content
@@ -1519,9 +1523,16 @@ def game_exit(vmstate=None):
     print('sortie de lediteur!')
 
 
-# -------------------------------------------- corps de test -----------
+# --------------------------------------------
+#  Entry pt, local ctx
+# --------------------------------------------
+import time
 if __name__ == '__main__':
-    game_enter()
-    while not gameover:  # pygame-loop
-        game_update(time.time())
-    game_exit()
+    vms = katasdk.vmstate
+    game_enter(vms)
+    while not gameover:
+        uresult = game_update(time.time())
+        if uresult is not None:
+            if 0 < uresult[0] < 3:
+                gameover = True
+    game_exit(vms)

@@ -1,63 +1,14 @@
 import math
-import time
 
 import katagames_sdk as katasdk
 
-katasdk.bootstrap('old_school')
 kengi = katasdk.kengi
-EngineEvTypes = kengi.event.EngineEvTypes
 pygame = kengi.pygame
 
+# temp
+import os
 
-# - constants
-# TODO: let's code a very crude formatting
-# one can display keywords simply by using a boldface font
-PY_KEYWORDS = (
-    # types
-    'bool', 'list', 'tuple', 'str', 'int', 'float',
-    # flow control
-    'if', 'else', 'elif', 'for', 'while',
-    # built-in functions
-    'len', 'not', 'in', 'enumerate', 'range'
-    # literals
-    'None', 'True', 'False',
-    # misc
-    'def', 'return', 'class', 'self'
-)
-DUMMY_PYCODE = """
-# Define the cloud object by extending pygame.sprite.Sprite
-# Use an image for a better-looking sprite
-class Cloud(pygame.sprite.Sprite):
-    def __init__(self):
-        super(Cloud, self).__init__()
-        self.surf = pygame.image.load("cloud.png").convert()
-        self.surf.set_colorkey((0, 0, 0), RLEACCEL)
-        # The starting position is randomly generated
-        self.rect = self.surf.get_rect(
-            center=(
-                random.randint(SCREEN_WIDTH + 20, SCREEN_WIDTH + 100),
-                random.randint(0, SCREEN_HEIGHT),
-            )
-        )
-
-    # Move the cloud based on a constant speed
-    # Remove the cloud when it passes the left edge of the screen
-    def update(self):
-        self.rect.move_ip(-5, 0)
-        if self.rect.right < 0:
-            self.kill()
-"""
-
-# RQ: to inject text into the editor use either:
-# set_text_from_list(self, text_list)
-# or
-# def set_text_from_string(self, string):
-
-# -------------- editor starts ---------------
-# temp (local tinkering)
-# import os
-# os.chdir('../')
-
+os.chdir('../')
 
 SAVE_ICO_LIFEDUR = 0.77  # sec
 
@@ -1391,137 +1342,18 @@ class TextEditor:  # (kengi.event.EventReceiver):
         if self.Trenn_counter > (self.FPS / 5) and self.caret_within_texteditor() and self.dragged_finished:
             self.screen.blit(self.carret_img, (self.cursor_X, self.cursor_Y))
             self.Trenn_counter = self.Trenn_counter % ((self.FPS / 5) * 2)
-# -------------- end of editor ---------------
 
 
-class Sharedstuff:
+EngineEvTypes = kengi.event.EngineEvTypes
+
+
+class EditorView(kengi.event.EventReceiver):
     def __init__(self):
-        self.disp_save_ico = None  # contains info 'bout time when it needs display
-        self.dump_content = None
-        self.kartridge_output = None
-        self.screen = None
-        self.editor = None
-        self.file_label = None  # for showing what is being edited
-        self.dirtymodel = None
+        super().__init__()
 
-
-# - global variables
-ico_surf = pygame.image.load('editor/myassets/saveicon.png')
-tt = ico_surf.get_size()
-scr_size = kengi.core.get_screen().get_size()
-icosurf_pos = ((scr_size[0] - tt[0])//2, (scr_size[1] - tt[1])//2)
-e_manager = None
-lu_event = p_event = None
-editor_text_content = ''
-formatedtxt_obj = None
-gameover = False
-sharedstuff = Sharedstuff()
-
-
-class CustomGameTicker(kengi.event.CogObj):
-    def __init__(self):
-        self.lu_event = kengi.event.CgmEvent(EngineEvTypes.LOGICUPDATE, curr_t=None)
-        self.paint_event = kengi.event.CgmEvent(EngineEvTypes.PAINT, screen=kengi.get_surface())
-        self.manager = kengi.event.EventManager.instance()
-
-    def refresh(self):
-        self.manager.post(self.lu_event)
-        self.manager.post(self.paint_event)
-        self.manager.update()
-
-
-ticker = CustomGameTicker()
-
-
-# - functions for the web -
-def game_enter(vmstate=None):
-    global sharedstuff, ticker
-
-    sharedstuff.screen = kengi.core.get_screen()
-    ssize = sharedstuff.screen.get_size()
-    offset_x = 0  # offset from the left border of the pygame window
-    offset_y = 10  # offset from the top border of the pygame window
-
-    ticker = CustomGameTicker()
-
-    # Instantiation
-    # TX.set_line_numbers(True)  # if you wish to change flag afterwards
-
-    # set content for the editor
-    fileinfo = '?'
-    if vmstate and vmstate.cedit_arg is not None:  # on peut pogner une cible a editer!
-        print('***** editing file ******* {}'.format(vmstate.cedit_arg))
-        fileinfo = vmstate.cedit_arg
-        # AJOUT mercredi 20/04/22 ca peut que marcher en local cela!
-        f = open(f'roms/{fileinfo}.py', 'r')
-        py_code = f.read()
-        f.close()
-    else:
-        py_code = DUMMY_PYCODE  # just a sample, like just like a LoremIpsum.py ...
-
-    # another way to do it --------------
-    # ajout dimanche 10.04
-    # f = open(PATH_SRC_FILE, 'r')
-    # editor_text_content = f.read()
-    # f.close()
-    # formatedtxt_obj = SFText(screen, editor_text_content,
-    # run precursor alone
-    #    font_path='editor0/fonts/')
-    # xxx -> 'editor/**assets/gibson0_font.png'
-    # if vmstate:
-    #    print('***** editing file ******* {}'.format(vmstate.cedit_arg))
-    #    ft = kengi.gui.ImgBasedFont(xxx, (0, 0, 250))
-    #    tt = ft.render('bidule: ' + vmstate.cedit_arg, False, (0, 250, 0))
-    # ------------
-
-    sharedstuff.dirtymodel = TextEditor(
-        offset_x, offset_y, ssize[0], ssize[1]-offset_y, kengi.get_surface(), line_numbers_flag=True
-    )
-    # sharedstuff.dirtymodel.turn_on()
-
-    sharedstuff.file_label = sharedstuff.dirtymodel.currentfont.render(f'opened file= {fileinfo}', False, (0, 250, 0))
-    sharedstuff.dirtymodel.set_text_from_string(py_code)
-
-    #sharedstuff.viewer = EditorView(offset_x, offset_y, ssize[0], ssize[1]-offset_y)
-    #sharedstuff.viewer.turn_on()
-
-
-def game_update(t_info=None):
-    global gameover, sharedstuff, ticker
-    scr = sharedstuff.screen
-    if sharedstuff.dirtymodel.use_events(pygame.event.get(), pygame.key.get_pressed(), sharedstuff, t_info):
-        gameover = True
-        return
-    if sharedstuff.kartridge_output:
-        gameover = True
-        return sharedstuff.kartridge_output
-
-    sharedstuff.dirtymodel.do_paint()
-    # ticker.refresh()
-
-    if sharedstuff.disp_save_ico:
-        if t_info > sharedstuff.disp_save_ico:
-            sharedstuff.disp_save_ico = None
-        scr.blit(ico_surf, icosurf_pos)
-
-    scr.blit(sharedstuff.file_label, (0, 0))
-    kengi.flip()
-
-
-def game_exit(vmstate=None):
-    global sharedstuff
-    if sharedstuff.dump_content and vmstate:
-        # has to be shared with the VM, too
-        # let's hack the .cedit_arg attribute, use it as a return value container
-        vmstate.cedit_arg = katasdk.mt_a + vmstate.cedit_arg + katasdk.mt_b + sharedstuff.dump_content
-        print('.cedit_arg hacked!')
-    kengi.quit()
-    print('sortie de lediteur!')
-
-
-# -------------------------------------------- corps de test -----------
-if __name__ == '__main__':
-    game_enter()
-    while not gameover:  # pygame-loop
-        game_update(time.time())
-    game_exit()
+    def proc_event(self, ev, source):
+        if ev.type == pygame.QUIT:
+            print('detection QUIT event par la vue')
+        if ev.type == EngineEvTypes.PAINT:
+            pass
+            # self.do_paint(ev.screen)

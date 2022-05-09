@@ -12,6 +12,9 @@ kengi = katasdk.kengi
 pygame = sbridge = None
 interruption = None  # used to change game
 
+VMCODE_LOAD = 2
+VMCODE_BEAM = 3
+
 # ---------- file IsoMapModel ------------------start
 OMEGA_TILES = [0, 35, 92, 160, 182, 183, 198, 203]
 
@@ -57,6 +60,7 @@ class IsoMapModel:
 
 
 # ---------- file IsoMapModel ------------------end
+
 
 PALIAS = {
     'greetings': 'niobepolis/myassets/greetings.png',
@@ -105,6 +109,11 @@ def console_func(console, match):
         console.output(strerror)
     else:
         console.output(out)
+
+# util
+def ipfs_answer(data):
+    print('ipfs_answer has received data!')
+    print('xxxxxxxxxxxxx')
 
 
 # --------------- implem of console functions, docstrings are used for help ------------------START
@@ -155,7 +164,27 @@ def tp(gametag):
     :return:
     """
     global interruption
-    interruption = [2, gametag]
+    if gametag not in katasdk.vmstate.gamelist_func():
+        return 'unknown game!'
+    else:
+        interruption = [VMCODE_LOAD, gametag]
+        return 'teleporting...'
+
+
+def beam(gametag):
+    """
+    Load a game, taking data from IPFS
+    """
+    if not katasdk.runs_in_web():
+        return 'cannot beam in local ctx'
+    else:
+        # TODO implement a corresp. table names<>ipfs url  (somehow)
+        assoc = {
+            'bidule': 'https://ipfs.io ...'  # public gateway
+        }
+        cible = 'https://ipfs.io/ipfs/QmTM6bddN9tZfshVwSvSY2a7fokR4bMRExBVfxS5NujDha'
+        katasdk.vmstate.ipfs_hack(cible, ipfs_answer)  # TODO cest plutot la vm qui fait ca, a priori nan?
+        return 'beaming...'
 
 
 def add(a, b):
@@ -231,7 +260,8 @@ listing_all_console_func = {  # IMPORTANT REMINDER!!
     "stellar": stellar_console_func,
     "edit": cedit,
     "tp": tp,
-    "gamelist": gamelister
+    "gamelist": gamelister,
+    "beam": beam
 }
 # --------------- implem of console functions, docstrings are used for help ------------------END
 
@@ -405,7 +435,7 @@ def game_update(infot=None):
     if binded_state and (to_edit is not None):
         binded_state.cedit_arg = to_edit  # commit name of the file to be edited to VMstate
         binded_state.newfile = newgame_creation
-        interruption = [2, 'editor']
+        interruption = [VMCODE_LOAD, 'editor']
 
     if interruption is not None:
         return interruption

@@ -1,6 +1,11 @@
 import random
+import katagames_sdk as katasdk
+katasdk.bootstrap()
+kengi = katasdk.kengi
+pygame = kengi.pygame
+EngineEvTypes = kengi.event.EngineEvTypes
 
-katasdk = kengi = pygame = EngineEvTypes = None
+
 NEXT_GAMETAG = 'niobepolis'
 W, H = 960 // 2, 540 // 2
 carres = list()
@@ -53,14 +58,8 @@ gstate = None
 
 # ----------------------- functions that manage the game --------------
 def game_enter(vm_state):
-    global katasdk, kengi, pygame, EngineEvTypes, gstate
-    katasdk = vm_state.katasdk
-
+    global gstate
     katasdk.set_mode('old_school')
-    kengi = katasdk.kengi
-    EngineEvTypes = kengi.event.EngineEvTypes
-    pygame = kengi.pygame
-
     gstate = SharedGstate()
 
 
@@ -113,14 +112,10 @@ def game_exit(vm_state=None):
 #  Entry pt, local ctx
 # --------------------------------------------
 if __name__ == '__main__':
-    import katagames_sdk as _katasdk
-    _katasdk.bootstrap()
-    vms = _katasdk.vmstate
-    vms.katasdk = _katasdk  # brainfuck. Seems we have no choice tho, sorry
-    game_enter(vms)
+    game_enter(katasdk.vmstate)
     while not gstate.gameover:
         uresult = game_update(None)
         if uresult is not None:
             if 0 < uresult[0] < 3:
                 gameover = True
-    game_exit(vms)
+    game_exit(katasdk.vmstate)

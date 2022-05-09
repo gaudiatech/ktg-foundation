@@ -2,7 +2,8 @@ import math
 import random
 import time
 import katagames_sdk as katasdk
-kengi = katasdk.bootstrap('old_school')
+katasdk.bootstrap()
+kengi = katasdk.kengi
 
 # ---------------------------
 
@@ -11,19 +12,20 @@ kengi = katasdk.bootstrap('old_school')
 #  the Niobe-polis WebApp works properly or not...
 
 # ---------------------------
-FROM_ARCHIVE = '__BRYTHON__' in globals()
-
 NEXT_GAME_LOADED = 'niobepolis'  # 'main1'
 
+# game constants
+BG_COLOR = (0, 25, 0)
+SHIP_COLOR = (119, 255, 0)
+BULLET_COLOR = SHIP_COLOR
+NB_ROCKS = 3
 
 pygame = kengi.pygame
 CogObject = kengi.event.CogObj
 EventReceiver = kengi.event.EventReceiver
 EngineEvTypes = kengi.event.EngineEvTypes
-SCR_SIZE = [0, 0]
-NB_ROCKS = 3
 bullets = list()
-FG_COLOR = (119, 255, 0)
+scr_size = [0, 0]
 music_snd = None
 view = ctrl = None
 Vector2 = pygame.math.Vector2
@@ -38,20 +40,10 @@ e_manager = None
 
 
 def img_load(img_name):
-##    global bundle_ptr
-##    if FROM_ARCHIVE:
-##        bytes_io = assets_datatable[img_name]
-##        surface = pygame.image.load(bytes_io)
-##        return surface
     return pygame.image.load(img_name)
 
 
 def snd_load(path):
-##    global bundle_ptr
-##    if FROM_ARCHIVE:
-##        bytes_io = assets_datatable[path]
-##        snd = pygame.mixer.Sound(bytes_io)
-##        return snd
     return pygame.mixer.Sound(path)
 
 
@@ -71,7 +63,7 @@ class RockSprite(pygame.sprite.Sprite):
             self.__class__.snd.set_volume(0.66)
         self.image = img_load('astero/myassets/rock.png')
         self.image.set_colorkey((0xff, 0, 0xff))
-        pos = [random.randint(0, SCR_SIZE[0] - 1), random.randint(0, SCR_SIZE[1] - 1)]
+        pos = [random.randint(0, scr_size[0] - 1), random.randint(0, scr_size[1] - 1)]
         self.rect = self.image.get_rect()
         self.rect.topleft = pos
         self.vx = random.choice((1, -1)) * random.randint(1, 3)
@@ -91,14 +83,14 @@ class RockSprite(pygame.sprite.Sprite):
             x += self.vx
             y += self.vy
             self.rect.topleft = x, y
-            if self.rect.left >= SCR_SIZE[0]:
+            if self.rect.left >= scr_size[0]:
                 self.rect.right = 0
             elif self.rect.right < 0:
-                self.rect.left = SCR_SIZE[0] - 2
-            if self.rect.top >= SCR_SIZE[1]:
+                self.rect.left = scr_size[0] - 2
+            if self.rect.top >= scr_size[1]:
                 self.rect.bottom = 0
             elif self.rect.bottom < 0:
-                self.rect.top = SCR_SIZE[1] - 2
+                self.rect.top = scr_size[1] - 2
         self.cpt = (self.cpt + 1) % 3
 
     def inv_speed(self):
@@ -201,10 +193,64 @@ class ShipModel(CogObject):
         self._commit_new_pos()
 
     def reset(self):
-        initpos = (SCR_SIZE[0] // 2, SCR_SIZE[1] // 2)
+        initpos = (scr_size[0] // 2, scr_size[1] // 2)
         self._position = Vector2(*initpos)
         self._angle = 0
         self._speed = Vector2()
+
+
+class TinyWorldView(EventReceiver):
+    RAD = 5
+
+    def __init__(self, ref_mod, rocksm):
+        super().__init__()
+        self.curr_pos = ref_mod.get_scr_pos()
+        self.curr_angle = ref_mod.get_orientation()
+        self.ref_rocksm = rocksm
+
+    def proc_event(self, ev, source):
+        if ev.type == EngineEvTypes.PAINT:
+            ev.screen.fill(BG_COLOR)
+            for rock_spr in self.ref_rocksm:
+                ev.screen.blit(rock_spr.image, rock_spr.rect.topleft)
+            for b in bullets:
+                pygame.draw.circle(ev.screen, BULLET_COLOR, (b[0].x, b[0].y), 3, 0)
+
+            self._draw_player(ev.screen)
+
+        elif ev.type == MyEvTypes.PlayerChanges:
+            self.curr_angle = ev.angle
+            self.curr_pos = ev.new_pos.x, ev.new_pos.y
+
+    def _draw_rocks(self, refscreen):
+        for rockinfo in self.ref_rocksm:
+            pos = rockinfo.rect.topleft
+            pygame.draw.circle(refscreen, SHIP_COLOR, pos, 25, 2)
+
+    def _draw_player(self, surf):
+        orientation = -self.curr_angle
+        pt_central = self.curr_pos
+        a, b, c = Vector2(), Vector2(), Vector2()
+        a.from_polar((1, deg(orientation - (2.0 * math.pi / 3))))
+        b.from_polar((1, deg(orientation)))
+        c.from_polar((1, deg(orientation + (2.0 * math.pi / 3))))
+        a.y *= -1
+        b.y *= -1
+        c.y *= -1
+        temp = [a, b, c]
+        temp[0] *= self.RAD * 1.2
+        temp[1] *= 3 * self.RAD
+        temp[2] *= 1.2 * self.RAD
+        pt_li = [Vector2(*pt_central),
+                 Vector2(*pt_central),
+                 Vector2(*pt_central)]
+        for i in range(3):
+            pt_li[i] += temp[i]
+        for pt in pt_li:
+            pt.x = round(pt.x)
+            pt.y = round(pt.y)
+        pt_li.reverse()
+        pygame.draw.polygon(surf, SHIP_COLOR, pt_li, 2)
 
 
 class ShipCtrl(EventReceiver):
@@ -273,62 +319,6 @@ class ShipCtrl(EventReceiver):
                 bullets.append(self._ref_ship.shoot())
 
 
-class TinyWorldView(EventReceiver):
-    BG_COLOR = (0, 25, 0)
-    RAD = 5
-    LINE_COLOR = (119, 255, 0)
-
-    def __init__(self, ref_mod, rocksm):
-        super().__init__()
-        self.curr_pos = ref_mod.get_scr_pos()
-        self.curr_angle = ref_mod.get_orientation()
-        self.ref_rocksm = rocksm
-
-    def proc_event(self, ev, source):
-        if ev.type == EngineEvTypes.PAINT:
-            ev.screen.fill(self.BG_COLOR)
-            for rock_spr in self.ref_rocksm:
-                ev.screen.blit(rock_spr.image, rock_spr.rect.topleft)
-            for b in bullets:
-                pygame.draw.circle(ev.screen, FG_COLOR, (b[0].x, b[0].y), 3, 0)
-
-            self._draw_player(ev.screen)
-
-        elif ev.type == MyEvTypes.PlayerChanges:
-            self.curr_angle = ev.angle
-            self.curr_pos = ev.new_pos.x, ev.new_pos.y
-
-    def _draw_rocks(self, refscreen):
-        for rockinfo in self.ref_rocksm:
-            pos = rockinfo.rect.topleft
-            pygame.draw.circle(refscreen, self.LINE_COLOR, pos, 25, 2)
-
-    def _draw_player(self, surf):
-        orientation = -self.curr_angle
-        pt_central = self.curr_pos
-        a, b, c = Vector2(), Vector2(), Vector2()
-        a.from_polar((1, deg(orientation - (2.0 * math.pi / 3))))
-        b.from_polar((1, deg(orientation)))
-        c.from_polar((1, deg(orientation + (2.0 * math.pi / 3))))
-        a.y *= -1
-        b.y *= -1
-        c.y *= -1
-        temp = [a, b, c]
-        temp[0] *= self.RAD * 1.2
-        temp[1] *= 3 * self.RAD
-        temp[2] *= 1.2 * self.RAD
-        pt_li = [Vector2(*pt_central),
-                 Vector2(*pt_central),
-                 Vector2(*pt_central)]
-        for i in range(3):
-            pt_li[i] += temp[i]
-        for pt in pt_li:
-            pt.x = round(pt.x)
-            pt.y = round(pt.y)
-        pt_li.reverse()
-        pygame.draw.polygon(surf, self.LINE_COLOR, pt_li, 2)
-
-
 def print_mini_tutorial():
     howto_infos = """HOW TO PLAY:
     * use arrows to move
@@ -355,7 +345,7 @@ class IntroV(EventReceiver):
         if self.painting:
             if ev.type == EngineEvTypes.PAINT:
                 ev.screen.fill((0, 0, 0))
-                ev.screen.blit(self.img, ((SCR_SIZE[0] - self.dim[0]) // 2, (SCR_SIZE[1] - self.dim[1]) // 2))
+                ev.screen.blit(self.img, ((scr_size[0] - self.dim[0]) // 2, (scr_size[1] - self.dim[1]) // 2))
 
             elif ev.type == pygame.KEYDOWN and ev.key == pygame.K_RETURN:
                 self.painting = False
@@ -370,10 +360,10 @@ class IntroV(EventReceiver):
 
 
 def game_enter(vmstate=None):
-    global SCR_SIZE, view, ctrl, lu_event, p_event, e_manager
-
+    global scr_size, view, ctrl, lu_event, p_event, e_manager
+    katasdk.set_mode('old_school')
     e_manager = kengi.event.EventManager.instance()
-    SCR_SIZE = kengi.core.get_screen().get_size()
+    scr_size[0], scr_size[1] = kengi.core.get_screen().get_size()
     introv = IntroV()
     shipm = ShipModel()
     li = [RockSprite() for _ in range(NB_ROCKS)]

@@ -1,6 +1,6 @@
 import katagames_sdk as katasdk
 import random
-katasdk.bootstrap('old_school')
+katasdk.bootstrap()
 
 
 # COOL FACT:
@@ -52,6 +52,7 @@ def gen_carres():
 
 def game_enter(vm_state=None):
     global screen, clock
+    katasdk.set_mode('old_school')
     clock = pygame.time.Clock()
     screen = kengi.get_surface()
     gen_carres()

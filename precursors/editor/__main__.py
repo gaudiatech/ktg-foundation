@@ -2,7 +2,8 @@ import math
 import katagames_sdk as katasdk
 katasdk.bootstrap()
 kengi = katasdk.kengi
-EngineEvTypes = None
+EngineEvTypes = kengi.event.EngineEvTypes
+pygame = kengi.pygame
 
 
 # - constants
@@ -1430,12 +1431,10 @@ ticker = None
 
 # - functions for the web -
 def game_enter(vmstate):
-    global pygame, EngineEvTypes, sharedstuff, ticker, EngineEvTypes, ico_surf, scr_size, icosurf_pos
+    global sharedstuff, ticker, ico_surf, scr_size, icosurf_pos
     katasdk.set_mode('old_school')
-    sharedstuff = Sharedstuff()
 
-    pygame = kengi.pygame
-    EngineEvTypes = kengi.event.EngineEvTypes
+    sharedstuff = Sharedstuff()
     sharedstuff.screen = kengi.get_surface()
     scr_size = sharedstuff.screen.get_size()
 
@@ -1486,8 +1485,8 @@ def game_enter(vmstate):
     sharedstuff.file_label = sharedstuff.dirtymodel.currentfont.render(f'opened file= {fileinfo}', False, (0, 250, 0))
     sharedstuff.dirtymodel.set_text_from_string(py_code)
 
-    #sharedstuff.viewer = EditorView(offset_x, offset_y, ssize[0], ssize[1]-offset_y)
-    #sharedstuff.viewer.turn_on()
+    # sharedstuff.viewer = EditorView(offset_x, offset_y, ssize[0], ssize[1]-offset_y)
+    # sharedstuff.viewer.turn_on()
 
 
 def game_update(t_info=None):
@@ -1528,11 +1527,10 @@ def game_exit(vmstate):
 # --------------------------------------------
 import time
 if __name__ == '__main__':
-    vms = katasdk.vmstate
-    game_enter(vms)
+    game_enter(katasdk.vmstate)
     while not gameover:
         uresult = game_update(time.time())
         if uresult is not None:
             if 0 < uresult[0] < 3:
                 gameover = True
-    game_exit(vms)
+    game_exit(katasdk.vmstate)

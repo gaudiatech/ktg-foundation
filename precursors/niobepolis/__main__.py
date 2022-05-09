@@ -73,7 +73,6 @@ PALIAS = {
     't203': 'niobepolis/myassets/t203.png',
 }
 
-
 # Coords used:
 # floorgrid -> 64x32 2D grid
 # chargrid  -> 32x16 2D grid
@@ -120,13 +119,13 @@ def _gencb(x):
     ingame_console.output(browser_res)
 
 
-def gamelist():
+def gamelister():
     """
     List all games. Use: gamelist
     :return:
     """
-    global glist
-    return "\n".join(glist)
+    global bound_func_glist
+    return "\n".join(bound_func_glist())
 
 
 def stellar_console_func(subcmd):
@@ -192,18 +191,21 @@ def size():
 
 
 to_edit = None
+newgame_creation = False
+gameover = False
 
 
 def cedit(cname):  # -------------------- experimental ----------------
     """
     Edit cartridge. Use: edit cartname
     """
-    global to_edit
+    global to_edit, newgame_creation
     to_edit = cname
+    if to_edit not in bound_func_glist():
+        newgame_creation = True
+    else:
+        newgame_creation = False
     return f'...requesting edition {cname}'
-
-
-gameover = False
 
 
 def dohalt():
@@ -229,7 +231,7 @@ listing_all_console_func = {  # IMPORTANT REMINDER!!
     "stellar": stellar_console_func,
     "edit": cedit,
     "tp": tp,
-    "gamelist": gamelist
+    "gamelist": gamelister
 }
 # --------------- implem of console functions, docstrings are used for help ------------------END
 
@@ -312,13 +314,15 @@ clock = None
 # --------------------------------------------
 #  Game Def
 # --------------------------------------------
-glist = []
+bound_func_glist = None
 binded_state = None
 
 
 def game_enter(vmstate):
-    global glist, binded_state, pygame, \
+    global binded_state, pygame, \
         introscree, scr, vscr_size, ingame_console, floortile, chartile, clock, sbridge
+    global bound_func_glist
+    bound_func_glist = vmstate.gamelist_func
 
     katasdk.set_mode('super_retro')
     pygame = kengi.pygame
@@ -330,8 +334,7 @@ def game_enter(vmstate):
     # init vars
     if katasdk.runs_in_web():
         sbridge = katasdk.stellar
-    if vmstate.gamelist is None:
-        vmstate.gamelist = list()
+
     ingame_console = kengi.console.CustomConsole(
         kengi.core.get_screen(),
         (0, 0, vscr_size[0], int(0.9 * vscr_size[1])),  # takes up 90% of the scr height
@@ -355,7 +358,6 @@ def game_enter(vmstate):
     clock = pygame.time.Clock()
     # - fin init vars
 
-    glist.extend(vmstate.gamelist)
     binded_state = vmstate
 
     global t_map_changed
@@ -402,6 +404,7 @@ def game_update(infot=None):
 
     if binded_state and (to_edit is not None):
         binded_state.cedit_arg = to_edit  # commit name of the file to be edited to VMstate
+        binded_state.newfile = newgame_creation
         interruption = [2, 'editor']
 
     if interruption is not None:
@@ -454,7 +457,7 @@ def game_update(infot=None):
 
 
 def game_exit(vmstate):
-    print(vmstate, 'bye!')
+    print('LEAVING niobe... done.')
     kengi.quit()
 
 

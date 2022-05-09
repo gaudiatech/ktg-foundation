@@ -1450,16 +1450,22 @@ def game_enter(vmstate):
     # Instantiation
     # TX.set_line_numbers(True)  # if you wish to change flag afterwards
 
-    # set content for the editor
-    fileinfo = '?'
+    # set text content for the editor
     if vmstate and vmstate.cedit_arg is not None:  # on peut pogner une cible a editer!
-        print('***** editing file ******* {}'.format(vmstate.cedit_arg))
         fileinfo = vmstate.cedit_arg
-        # AJOUT mercredi 20/04/22 ca peut que marcher en local cela!
-        f = open(f'roms/{fileinfo}.py', 'r')
-        py_code = f.read()
-        f.close()
+        if vmstate.cedit_arg in vmstate.gamelist_func():
+            infomsg = '** edit existing file {} **'.format(vmstate.cedit_arg)
+            # AJOUT mercredi 20/04/22 ca peut que marcher en local cela!
+            f = open(f'roms/{fileinfo}.py', 'r')
+            py_code = f.read()
+            f.close()
+
+        else:  # game creation
+            infomsg = '** creating new file {} **'.format(vmstate.cedit_arg)
+            py_code = vmstate.blankfile_template
+        print(infomsg)
     else:
+        fileinfo = '?'
         py_code = DUMMY_PYCODE  # just a sample, like just like a LoremIpsum.py ...
 
     # another way to do it --------------

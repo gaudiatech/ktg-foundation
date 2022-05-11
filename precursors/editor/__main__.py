@@ -1,26 +1,31 @@
 import math
+
 import katagames_sdk as katasdk
+
+
 katasdk.bootstrap()
+
+# - gl. variables
 kengi = katasdk.kengi
 EngineEvTypes = kengi.event.EngineEvTypes
 pygame = kengi.pygame
+glclock = pygame.time.Clock()
+ticker = None
+ico_surf = None
+scr_size = None
+icosurf_pos = None
+e_manager = None
+editor_text_content = ''
+formatedtxt_obj = None
+gameover = False
+sharedstuff = None
 
 
 # - constants
-# TODO: let's code a very crude formatting
-# one can display keywords simply by using a boldface font
-PY_KEYWORDS = (
-    # types
-    'bool', 'list', 'tuple', 'str', 'int', 'float',
-    # flow control
-    'if', 'else', 'elif', 'for', 'while',
-    # built-in functions
-    'len', 'not', 'in', 'enumerate', 'range'
-    # literals
-    'None', 'True', 'False',
-    # misc
-    'def', 'return', 'class', 'self'
-)
+MFPS = 50
+SAVE_ICO_LIFEDUR = 1.33  # sec
+
+# constant to have smth just like "lorem ipsum" text, if needed
 DUMMY_PYCODE = """
 # Define the cloud object by extending pygame.sprite.Sprite
 # Use an image for a better-looking sprite
@@ -45,18 +50,20 @@ class Cloud(pygame.sprite.Sprite):
             self.kill()
 """
 
-# RQ: to inject text into the editor use either:
-# set_text_from_list(self, text_list)
-# or
-# def set_text_from_string(self, string):
-
-# -------------- editor starts ---------------
-# temp (local tinkering)
-# import os
-# os.chdir('../')
-
-
-SAVE_ICO_LIFEDUR = 0.77  # sec
+# constant defined to implement a crude formatting
+# one can display keywords simply by using a different color for these words
+PY_KEYWORDS = (
+    # types
+    'bool', 'list', 'tuple', 'str', 'int', 'float',
+    # flow control
+    'if', 'else', 'elif', 'for', 'while',
+    # built-in functions
+    'len', 'not', 'in', 'enumerate', 'range'
+    # literals
+    'None', 'True', 'False',
+    # misc
+    'def', 'return', 'class', 'self'
+)
 
 
 class Pyperclip:  # simulation
@@ -75,9 +82,399 @@ class Pyperclip:  # simulation
         return cls.strv
 
 
-class TextEditor:  # (kengi.event.EventReceiver):
-    # ++++++++++ Scroll functionality
-    def display_scrollbar(self):
+# ----------------------------------------------
+#   start of editor
+#   N.B. we should split this to have a view that inherits from
+#   kengi.event.EventReceiver
+# ----------------------------------------------
+class TextEditorView(kengi.event.EventReceiver):
+    def __init__(self, editorblob_obj, maxfps):
+        super().__init__()
+        self._blob = editorblob_obj  # blob bc its not 100% refactored, yet
+        self._maxfps = maxfps
+        self.latest_t = None
+        self._prev_mouse_x, self._prev_mouse_y = 0, 0
+
+        self.firstiteration_boolean = True
+        self.click_hold = False
+        self.cycleCounter = 0  # Used to be able to tell whether a mouse-drag action has been handled already or not.
+
+        # click down - coordinates used to identify start-point of drag
+        self.dragged_active = False
+        self.dragged_finished = True
+        self.last_clickdown_cycle = 0
+        self.last_clickup_cycle = 0
+
+    def __getattr__(self, item):  # hack for easing the refactoring
+        return getattr(self._blob, item)
+
+    def _manage_mouse_drag(self):
+        mouse_x, mouse_y = kengi.core.proj_to_vscreen(pygame.mouse.get_pos())
+        mouse_pressed = pygame.mouse.get_pressed()
+
+        if (self.last_clickup_cycle - self.last_clickdown_cycle) >= 0:
+            print(' yeyey ')
+            # Clicked the mouse lately and has not been handled yet.
+            # To differentiate between click and drag we check whether the down-click
+            # is on the same letter and line as the up-click!
+            # We set the boolean variables here and handle the caret positioning.
+            if self.drag_chosen_LineIndex_end == self.drag_chosen_LineIndex_start and \
+                    self.drag_chosen_LetterIndex_end == self.drag_chosen_LetterIndex_start:
+                self.dragged_active = False  # no letters are actually selected -> Actual click
+            else:
+                self.dragged_active = True  # Actual highlight
+
+            self.dragged_finished = True  # we finished the highlighting operation either way
+
+            # handle caret positioning
+            self.chosen_LineIndex = self.drag_chosen_LineIndex_end
+            self.chosen_LetterIndex = self.drag_chosen_LetterIndex_end
+
+            # TODO the dragging operation is kinda broken, fix this!
+            # tom has commented out this line on may 11th
+            # self.update_caret_position()
+            # i can see that i can select text, but
+            #  - i have to Ctrl-A first
+            #  - the update of highlighted txt comes late!
+
+            # reset after upclick so we don't execute this block again and again.
+            self.last_clickdown_cycle = 0
+            self.last_clickup_cycle = -1
+
+        # Scrollbar - Dragging
+        if mouse_pressed[0] == 1 and self.scroll_dragging:
+            # left mouse is being pressed after click on scrollbar
+            if mouse_y < self.scroll_start_y and self.showStartLine > 0:
+                # dragged higher
+                self.scrollbar_up()
+            elif mouse_y > self.scroll_start_y and self.showStartLine + self.showable_line_numbers_in_editor < self.maxLines:
+                # dragged lower
+                self.scrollbar_down()
+
+    def proc_event(self, ev, source):
+        # def use_events(self, pygame_events, pressed_keys, shared, tinfo=None):
+        # needs to be called within a while loop to be able to catch key/mouse input 'n update visuals throughout use
+        if ev.type == EngineEvTypes.LOGICUPDATE:
+            self.cycleCounter = self.cycleCounter + 1
+            self.latest_t = ev.curr_t
+            self._manage_mouse_drag()
+
+        elif ev.type == pygame.QUIT:
+            sharedstuff.kartridge_output = [2, 'niobepolis']
+            return
+
+        elif ev.type == EngineEvTypes.PAINT:
+            # first rendering
+            if self.firstiteration_boolean:
+                self.firstiteration_boolean = False
+                tmp = (self.editor_offset_X, self.editor_offset_Y, self.textAreaWidth, self.textAreaHeight)
+                # paint entire area to avoid pixel error beneath line numbers
+                pygame.draw.rect(ev.screen, self.codingBackgroundColor, tmp)
+
+            self.do_paint(ev.screen)
+
+        elif ev.type == pygame.KEYDOWN:
+            pressed_keys = pygame.key.get_pressed()
+            self.handle_keyboard_input(ev, pressed_keys, 0 if self.latest_t is None else self.latest_t)
+
+        elif ev.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION):
+            mouse_pressed = pygame.mouse.get_pressed()
+            mouse_x, mouse_y = kengi.core.proj_to_vscreen(pygame.mouse.get_pos())
+            # debugging
+            if ev.type == pygame.MOUSEBUTTONDOWN:
+                print('click')
+            self._prev_mouse_x, self._prev_mouse_y = mouse_x, mouse_y
+            self.handle_mouse_input(ev, mouse_x, mouse_y, mouse_pressed)
+
+    def do_paint(self, scr_ref):
+        global sharedstuff
+        # RENDERING 1 - Background objects
+        self.render_background_coloring(scr_ref)
+        self.render_line_numbers(scr_ref)
+
+        # RENDERING 2 - Lines
+        self.render_highlight(self._prev_mouse_x, self._prev_mouse_y)
+
+        # single-color text
+        list_of_dicts = self.get_single_color_dicts()
+        self.render_line_contents_by_dicts(list_of_dicts, scr_ref)
+
+        self.render_caret(scr_ref)
+
+        self.display_scrollbar(scr_ref)
+        scr_ref.blit(sharedstuff.file_label, (0, 0))
+
+        if self.latest_t is not None:
+            if sharedstuff.disp_save_ico:
+                scr_ref.blit(ico_surf, icosurf_pos)
+                if self.latest_t > sharedstuff.disp_save_ico:
+                    sharedstuff.disp_save_ico = None
+
+        kengi.flip()
+
+    def render_background_coloring(self, scr) -> None:
+        """
+        Renders background color of the text area.
+        """
+        bg_left = self.editor_offset_X + self.lineNumberWidth
+        bg_top = self.editor_offset_Y
+        bg_width = self.textAreaWidth - self.lineNumberWidth
+        bg_height = self.textAreaHeight
+        pygame.draw.rect(scr, self.codingBackgroundColor, (bg_left, bg_top, bg_width, bg_height))
+
+    def render_line_numbers(self, scr):
+        """
+        While background rendering is done for all "line-slots"
+        (to overpaint remaining "old" numbers without lines)
+        we render line-numbers only for existing string-lines.
+        """
+        if self.displayLineNumbers and self.rerenderLineNumbers:
+            self.rerenderLineNumbers = False
+            line_numbers_y = self.editor_offset_Y  # init for first line
+            for x in range(self.showStartLine, self.showStartLine + self.showable_line_numbers_in_editor):
+
+                # background
+                r = (self.editor_offset_X, line_numbers_y, self.lineNumberWidth, self.line_gap)
+                pygame.draw.rect(scr, self.lineNumberBackgroundColor, r)  # to debug use: ,1) after r
+
+                # line number
+                if x < self.get_showable_lines():
+                    # x + 1 in order to start with line 1 (only display, logical it's the 0th item in the list
+                    text = self.currentfont.render(str(x + 1).zfill(2), self.txt_antialiasing, self.lineNumberColor)
+                    text_rect = text.get_rect()
+                    text_rect.center = pygame.Rect(r).center
+                    scr.blit(text, text_rect)  # render on center of bg block
+                line_numbers_y += self.line_gap
+
+    def render_line_contents_by_dicts(self, dicts, scr):
+        # Preparation of the rendering:
+        self.yline = self.yline_start
+        first_line = self.showStartLine
+        if self.showable_line_numbers_in_editor < len(self.line_string_list):
+            # we got more text than we are able to display
+            last_line = self.showStartLine + self.showable_line_numbers_in_editor
+        else:
+            last_line = self.maxLines
+
+        # Actual line rendering based on dict-keys
+        for line_list in dicts[first_line: last_line]:
+            xcoord = self.xline_start
+            for a_dict in line_list:
+                surface = self.currentfont.render(a_dict['chars'], self.txt_antialiasing,
+                                                  a_dict['color'])  # create surface
+                scr.blit(surface, (xcoord, self.yline))  # blit surface onto screen
+                xcoord = xcoord + (len(a_dict['chars']) * self.letter_size_X)  # next line-part prep
+
+            self.yline += self.line_gap  # next line prep
+
+    def render_caret(self, scr):
+        """
+        Called every frame. Displays a cursor for x frames, then none for x frames. Only displayed if line in which
+        caret resides is visible and there is no active dragging operation going on.
+        Dependent on FPS -> 5 intervalls per second
+        Creates 'blinking' animation
+        """
+        self.Trenn_counter += 1
+        if self.Trenn_counter > (self._maxfps / 5) and self.caret_within_texteditor() and self.dragged_finished:
+            scr.blit(self.carret_img, (self.cursor_X, self.cursor_Y))
+            self.Trenn_counter = self.Trenn_counter % ((self._maxfps / 5) * 2)
+
+    def handle_keyboard_input(self, event, pressed_keys, tinfo):
+        global sharedstuff
+
+        if event.key == pygame.K_ESCAPE:
+            sharedstuff.kartridge_output = [2, 'niobepolis']
+            return True
+
+        # ___ COMBINATION KEY INPUTS ___
+        # Functionality whether something is highlighted or not (highlight all / paste)
+        ctrl_key_pressed = pressed_keys[pygame.K_LCTRL] or pressed_keys[pygame.K_RCTRL]
+        if ctrl_key_pressed and event.key == pygame.K_a:
+            self.highlight_all()
+
+        elif ctrl_key_pressed and event.key == pygame.K_z:
+            # TODO implement undo operation
+            print('undo not implemented yet!')
+            pass
+
+        elif ctrl_key_pressed and event.key == pygame.K_v:
+            self.handle_highlight_and_paste()
+
+        elif ctrl_key_pressed and event.key == pygame.K_s:
+            print('**SAVE detected**')
+            sharedstuff.disp_save_ico = tinfo + SAVE_ICO_LIFEDUR
+            sharedstuff.dump_content = self.get_text_as_string()
+
+        # Functionality for when something is highlighted (cut / copy)
+        elif self.dragged_finished and self.dragged_active:
+            if (pressed_keys[pygame.K_LCTRL] or pressed_keys[pygame.K_RCTRL]) and event.key == pygame.K_x:
+                self.handle_highlight_and_cut()
+            elif (pressed_keys[pygame.K_LCTRL] or pressed_keys[pygame.K_RCTRL]) and event.key == pygame.K_c:
+                self.handle_highlight_and_copy()
+            else:
+                self.handle_input_with_highlight(event)  # handle char input on highlight
+
+        # ___ SINGLE KEY INPUTS ___
+        else:
+            numpad_ope = [
+                pygame.K_KP_PERIOD, pygame.K_KP_DIVIDE, pygame.K_KP_MULTIPLY,
+                pygame.K_KP_MINUS, pygame.K_KP_PLUS, pygame.K_KP_EQUALS
+            ]
+
+            self.reset_text_area_to_caret()  # reset visual area to include line of caret if necessary
+            self.chosen_LetterIndex = int(self.chosen_LetterIndex)
+
+            # print("event", event)
+
+            # Detect tapping/holding of the "DELETE" and "BACKSPACE" key while something is highlighted
+            if self.dragged_finished and self.dragged_active and \
+                    (event.unicode == '\x08' or event.unicode == '\x7f'):
+                # create the uniform event for both keys so we don't have to write two functions
+                deletion_event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_DELETE)
+                self.handle_input_with_highlight(deletion_event)  # delete and backspace have the same functionality
+
+            # ___ DELETIONS ___
+            elif event.unicode == '\x08':  # K_BACKSPACE
+                self.handle_keyboard_backspace()
+                self.reset_text_area_to_caret()  # reset caret if necessary
+
+            elif event.unicode == '\x7f':  # K_DELETE
+                self.handle_keyboard_delete()
+                self.reset_text_area_to_caret()  # reset caret if necessary
+
+            # ___ NORMAL KEYS ___
+            # This covers all letters and numbers (not those on numpad).
+            elif len(pygame.key.name(event.key)) == 1:
+                self._blob.insert_unicode(event.unicode)
+            elif event.unicode == '_':
+                self.insert_unicode('_')
+
+            # TODO enable numpad keys again, once the ktg VM is clean
+            # ___ NUMPAD KEYS ___
+            # for the numbers, numpad must be activated (mod = 4096)
+            # elif event.mod == 4096 and 1073741913 <= event.key <= 1073741922:
+            #    self.insert_unicode(event.unicode)
+
+            # all other numpad keys can be triggered with & without mod
+            elif event.key in numpad_ope:
+                self.insert_unicode(event.unicode)
+
+            # ___ SPECIAL KEYS ___
+            elif event.key == pygame.K_TAB:  # TABULATOR
+                self.handle_keyboard_tab()
+            elif event.key == pygame.K_SPACE:  # SPACEBAR
+                self.handle_keyboard_space()
+            elif event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:  # RETURN
+                self.handle_keyboard_return()
+            elif event.key == pygame.K_UP:  # ARROW_UP
+                self.handle_keyboard_arrow_up()
+            elif event.key == pygame.K_DOWN:  # ARROW_DOWN
+                self.handle_keyboard_arrow_down()
+            elif event.key == pygame.K_RIGHT:  # ARROW_RIGHT
+                self.handle_keyboard_arrow_right()
+            elif event.key == pygame.K_LEFT:  # ARROW_LEFT
+                self.handle_keyboard_arrow_left()
+            else:
+                if event.key not in [pygame.K_RSHIFT, pygame.K_LSHIFT, pygame.K_DELETE,
+                                     pygame.K_BACKSPACE, pygame.K_CAPSLOCK, pygame.K_LCTRL, pygame.K_RCTRL]:
+                    # We handled the keys separately
+                    # Capslock is apparently implicitly handled
+                    # when using it in combination
+                    print('*WARNING* No implementation for key: ', end='')
+                    print(pygame.key.name(event.key))
+        return False
+
+    def handle_mouse_input(self, event, mouse_x, mouse_y, mouse_pressed) -> None:
+        """
+        Handles mouse input based on mouse events (Buttons down/up + coordinates).
+        Handles drag-and-drop-select as well as single-click.
+        The code only differentiates the single-click only as so far, that
+            the DOWN-event is on the same position as the UP-event.
+
+        Implemented so far:
+        - left-click (selecting as drag-and-drop or single-click)
+        - mouse-wheel (scrolling)
+        """
+
+        # ___ MOUSE CLICKING DOWN ___ #
+
+        # Mouse scrolling wheel should only work if it is within the coding area (excluding scrollbar area)
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if self.mouse_within_texteditor(mouse_x, mouse_y):
+                # ___ MOUSE SCROLLING ___ #
+                if event.button == 4 and self.showStartLine > 0:
+                    self._blob.scrollbar_up()
+                elif event.button == 5 and self.showStartLine + self.showable_line_numbers_in_editor < self.maxLines:
+                    self._blob.scrollbar_down()
+
+                # ___ MOUSE LEFT CLICK DOWN ___ #
+                elif event.button == 1:  # left mouse button
+                    if not self.click_hold:
+                        print(' button 1')
+                        # in order not to have the mouse move around after a click,
+                        # we need to disable this function until we RELEASE it.
+                        self.last_clickdown_cycle = self.cycleCounter
+                        self.click_hold = True
+                        self.dragged_active = True
+                        self.dragged_finished = False
+                        if self.mouse_within_texteditor(mouse_x, mouse_y):  # editor area
+
+                            if self.mouse_within_existing_lines(mouse_y):  # in area of existing lines
+                                self._blob.set_drag_start_by_mouse(mouse_x, mouse_y)
+                            else:  # clicked below the existing lines
+                                self._blob.set_drag_start_after_last_line()
+                            print('inside txt')
+                            self._blob.update_caret_position_by_drag_start()
+
+                            # tom add-on:
+                            # we need this otherwise the carret moves but the text input is at the wrong location!
+                            self._blob.set_drag_start_by_mouse(mouse_x, mouse_y)
+
+                        else:  # mouse outside of editor, don't care.
+                            pass
+            # Scrollbar-handling
+            else:
+                if self.scrollbar is not None:
+                    if self.scrollbar.collidepoint(mouse_x, mouse_y):
+                        self.scroll_start_y = mouse_y
+                        self.scroll_dragging = True
+
+        # ___ MOUSE LEFT CLICK UP ___ #
+        elif event.type == pygame.MOUSEBUTTONUP:
+            if event.button == 1:
+                self.scroll_dragging = False  # reset scroll (if necessary)
+
+                if self.click_hold:
+                    # mouse dragging only with left mouse up
+                    # mouse-up only valid if we registered a mouse-down within the editor via click_hold earlier
+
+                    self.last_clickup_cycle = self.cycleCounter
+                    self.click_hold = False
+
+                    if self.mouse_within_texteditor(mouse_x, mouse_y):  # editor area
+                        if self.mouse_within_existing_lines(mouse_y):  # in area of existing lines
+                            self.set_drag_end_by_mouse(mouse_x, mouse_y)
+                        else:  # clicked beneath the existing lines
+                            self.set_drag_end_after_last_line()
+                        self.update_caret_position_by_drag_end()
+
+                    else:  # mouse-up outside of editor
+                        if mouse_y < self.editor_offset_Y:
+                            # Mouse-up above editor -> set to first visible line
+                            self.drag_chosen_LineIndex_end = self.showStartLine
+                        elif mouse_y > (self.editor_offset_Y + self.textAreaHeight - self.conclusionBarHeight):
+                            # Mouse-up below the editor -> set to last visible line
+                            if self.maxLines >= self.showable_line_numbers_in_editor:
+                                xxy = self.showStartLine + self.showable_line_numbers_in_editor - 1
+                                self.drag_chosen_LineIndex_end = xxy
+                            else:
+                                self.drag_chosen_LineIndex_end = self.maxLines - 1
+                        else:  # mouse left or right of the editor outside
+                            self.set_drag_end_line_by_mouse(mouse_y)
+                        # Now we can determine the letter based on mouse_x (and selected line within the function)
+                        self.set_drag_end_letter_by_mouse(mouse_x)
+
+    def display_scrollbar(self, scr):
         if len(self.line_string_list) > self.showable_line_numbers_in_editor:
             # scroll bar is a fraction of the space
             w = self.scrollBarWidth
@@ -91,12 +488,15 @@ class TextEditor:  # (kengi.event.EventReceiver):
 
             self.scrollbar = pygame.Rect(x, y, w, h)
             # actual scrollbar
-            pygame.draw.rect(self.screen, self.color_scrollbar, self.scrollbar)
+            pygame.draw.rect(scr, self.color_scrollbar, self.scrollbar)
             # bottom round corner
-            pygame.draw.circle(self.screen, self.color_scrollbar, (int(x + (w / 2)), y + h), int(w / 2))
+            pygame.draw.circle(scr, self.color_scrollbar, (int(x + (w / 2)), y + h), int(w / 2))
         else:  # if scrollbar is not needed, don't show
             self.scrollbar = None
 
+
+class TextEditor:
+    # ++++++++++ Scroll functionality
     def scrollbar_up(self) -> None:
         self.showStartLine -= 1
         self.cursor_Y += self.line_gap
@@ -201,9 +601,10 @@ class TextEditor:  # (kengi.event.EventReceiver):
         """
         self.dragged_active = False  # deactivate highlight
         self.dragged_finished = True  # highlight is finished
-        self.update_caret_position()  # update caret position to chosen_Index (Line+Letter)
         self.last_clickdown_cycle = 0  # reset drag-cycle
         self.last_clickup_cycle = -1
+
+        self.update_caret_position()  # update caret position to chosen_Index (Line+Letter)
         self.rerenderLineNumbers = True
 
         if len(self.line_string_list) <= self.showable_line_numbers_in_editor:
@@ -234,123 +635,6 @@ class TextEditor:  # (kengi.event.EventReceiver):
     # files for customization of the editor:
     # from ._customization import set_colorscheme
 
-    # +++++++++++++++ input handling MOUSE
-    def handle_mouse_input(self, pygame_events, mouse_x, mouse_y, mouse_pressed) -> None:
-        """
-        Handles mouse input based on mouse events (Buttons down/up + coordinates).
-        Handles drag-and-drop-select as well as single-click.
-        The code only differentiates the single-click only as so far, that
-            the DOWN-event is on the same position as the UP-event.
-
-        Implemented so far:
-        - left-click (selecting as drag-and-drop or single-click)
-        - mouse-wheel (scrolling)
-        """
-
-        for event in pygame_events:
-            # ___ MOUSE CLICKING DOWN ___ #
-            # Scrollbar-handling
-            if event.type == pygame.MOUSEBUTTONDOWN and not self.mouse_within_texteditor(mouse_x, mouse_y):
-                if self.scrollbar is not None:
-                    if self.scrollbar.collidepoint(mouse_x, mouse_y):
-                        self.scroll_start_y = mouse_y
-                        self.scroll_dragging = True
-
-            # Mouse scrolling wheel should only work if it is within the coding area (excluding scrollbar area)
-            if event.type == pygame.MOUSEBUTTONDOWN and self.mouse_within_texteditor(mouse_x, mouse_y):
-                # ___ MOUSE SCROLLING ___ #
-                if event.button == 4 and self.showStartLine > 0:
-                    self.scrollbar_up()
-                elif event.button == 5 and self.showStartLine + self.showable_line_numbers_in_editor < self.maxLines:
-                    self.scrollbar_down()
-
-                # ___ MOUSE LEFT CLICK DOWN ___ #
-                elif event.button == 1:  # left mouse button
-                    if not self.click_hold:
-                        # in order not to have the mouse move around after a click,
-                        # we need to disable this function until we RELEASE it.
-                        self.last_clickdown_cycle = self.cycleCounter
-                        self.click_hold = True
-                        self.dragged_active = True
-                        self.dragged_finished = False
-                        if self.mouse_within_texteditor(mouse_x, mouse_y):  # editor area
-                            if self.mouse_within_existing_lines(mouse_y):  # in area of existing lines
-                                self.set_drag_start_by_mouse(mouse_x, mouse_y)
-                            else:  # clicked below the existing lines
-                                self.set_drag_start_after_last_line()
-                            self.update_caret_position_by_drag_start()
-                        else:  # mouse outside of editor, don't care.
-                            pass
-
-            # ___ MOUSE LEFT CLICK UP ___ #
-            if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-
-                self.scroll_dragging = False  # reset scroll (if necessary)
-
-                if self.click_hold:
-                    # mouse dragging only with left mouse up
-                    # mouse-up only valid if we registered a mouse-down within the editor via click_hold earlier
-
-                    self.last_clickup_cycle = self.cycleCounter
-                    self.click_hold = False
-
-                    if self.mouse_within_texteditor(mouse_x, mouse_y):  # editor area
-                        if self.mouse_within_existing_lines(mouse_y):  # in area of existing lines
-                            self.set_drag_end_by_mouse(mouse_x, mouse_y)
-                        else:  # clicked beneath the existing lines
-                            self.set_drag_end_after_last_line()
-                        self.update_caret_position_by_drag_end()
-
-                    else:  # mouse-up outside of editor
-                        if mouse_y < self.editor_offset_Y:
-                            # Mouse-up above editor -> set to first visible line
-                            self.drag_chosen_LineIndex_end = self.showStartLine
-                        elif mouse_y > (self.editor_offset_Y + self.textAreaHeight - self.conclusionBarHeight):
-                            # Mouse-up below the editor -> set to last visible line
-                            if self.maxLines >= self.showable_line_numbers_in_editor:
-                                xxy = self.showStartLine + self.showable_line_numbers_in_editor - 1
-                                self.drag_chosen_LineIndex_end = xxy
-                            else:
-                                self.drag_chosen_LineIndex_end = self.maxLines - 1
-                        else:  # mouse left or right of the editor outside
-                            self.set_drag_end_line_by_mouse(mouse_y)
-                        # Now we can determine the letter based on mouse_x (and selected line within the function)
-                        self.set_drag_end_letter_by_mouse(mouse_x)
-
-            # _______ CHECK FOR MOUSE DRAG AND HANDLE CLICK _______ #
-            if (self.last_clickup_cycle - self.last_clickdown_cycle) >= 0:
-                # Clicked the mouse lately and has not been handled yet.
-                # To differentiate between click and drag we check whether the down-click
-                # is on the same letter and line as the up-click!
-                # We set the boolean variables here and handle the caret positioning.
-                if self.drag_chosen_LineIndex_end == self.drag_chosen_LineIndex_start and \
-                        self.drag_chosen_LetterIndex_end == self.drag_chosen_LetterIndex_start:
-                    self.dragged_active = False  # no letters are actually selected -> Actual click
-                else:
-                    self.dragged_active = True  # Actual highlight
-
-                self.dragged_finished = True  # we finished the highlighting operation either way
-
-                # handle caret positioning
-                self.chosen_LineIndex = self.drag_chosen_LineIndex_end
-                self.chosen_LetterIndex = self.drag_chosen_LetterIndex_end
-                self.update_caret_position()
-
-                # reset after upclick so we don't execute this block again and again.
-                self.last_clickdown_cycle = 0
-                self.last_clickup_cycle = -1
-
-        # Scrollbar - Dragging
-        if mouse_pressed[0] == 1 and self.scroll_dragging:
-            # left mouse is being pressed after click on scrollbar
-            if mouse_y < self.scroll_start_y and self.showStartLine > 0:
-                # dragged higher
-                self.scrollbar_up()
-            elif mouse_y > self.scroll_start_y \
-                    and self.showStartLine + self.showable_line_numbers_in_editor < self.maxLines:
-                # dragged lower
-                self.scrollbar_down()
-
     def mouse_within_texteditor(self, mouse_x, mouse_y) -> bool:
         """
         Returns True if the given coordinates are within the text-editor area of the pygame window, otherwise False.
@@ -371,6 +655,7 @@ class TextEditor:  # (kengi.event.EventReceiver):
     # +++++++++++++++++++ caret
     def set_drag_start_by_mouse(self, mouse_x, mouse_y) -> None:
         # get line
+        # print('in drag ', mouse_x, mouse_y)
         self.drag_chosen_LineIndex_start = self.get_line_index(mouse_y)
 
         # end of line
@@ -426,12 +711,14 @@ class TextEditor:  # (kengi.event.EventReceiver):
         """
         # Updates cursor_X and cursor_Y positions based on the start position of a dragging operation.
         """
+        print('update by drag start', self.cursor_X, self.cursor_Y)
         # X Position
         self.cursor_X = self.xline_start + (self.drag_chosen_LetterIndex_start * self.letter_size_X)
         # Y Position
         self.cursor_Y = self.editor_offset_Y
         self.cursor_Y += self.drag_chosen_LineIndex_start * self.line_gap
         self.cursor_Y -= self.showStartLine * self.lineHeight
+        print(self.cursor_X, self.cursor_Y)
 
     def update_caret_position_by_drag_end(self) -> None:
         """
@@ -492,14 +779,11 @@ class TextEditor:  # (kengi.event.EventReceiver):
     def scroll_down(self):
         self.scrollbar_down()
 
-    def __init__(self, offset_x, offset_y, text_area_width, text_area_height, scr, line_numbers_flag=False):
-        self.screen = scr
+    def __init__(self, offset_x, offset_y, text_area_width, text_area_height, line_numbers_flag=False):
 
         # kengi+sdk flavored font obj
         self.currentfont = kengi.gui.ImgBasedFont('editor/myassets/gibson1_font.png', (87, 77, 11))
         self.letter_size_Y = self.currentfont.get_linesize()
-
-        self._prev_mouse_x, self._prev_mouse_y = 0, 0
 
         # VISUALS
         self.txt_antialiasing = 0
@@ -562,17 +846,12 @@ class TextEditor:  # (kengi.event.EventReceiver):
         self.cursor_Y = self.editor_offset_Y
         self.cursor_X = self.xline_start
 
-        # click down - coordinates used to identify start-point of drag
-        self.dragged_active = False
-        self.dragged_finished = True
+        # relates to dragging operation
         self.drag_chosen_LineIndex_start = 0
         self.drag_chosen_LetterIndex_start = 0
-        self.last_clickdown_cycle = 0
-
-        # click up  - coordinates used to identify end-point of drag
+        # coordinates used to identify end-point of drag
         self.drag_chosen_LineIndex_end = 0
         self.drag_chosen_LetterIndex_end = 0
-        self.last_clickup_cycle = 0
 
         # Colors
         self.codingBackgroundColor = (40, 41, 41)
@@ -592,14 +871,7 @@ class TextEditor:  # (kengi.event.EventReceiver):
         self.key_continued_intervall = 30
         pygame.key.set_repeat(self.key_initial_delay, self.key_continued_intervall)
 
-        # Performance enhancing variables
-        self.firstiteration_boolean = True
         self.rerenderLineNumbers = True
-        self.click_hold = False
-        self.cycleCounter = 0  # Used to be able to tell whether a mouse-drag action has been handled already or not.
-
-        self.clock = pygame.time.Clock()
-        self.FPS = 60  # we need to limit the FPS so we don't trigger the same actions too often (e.g. deletions)
 
     def highlight_lines(self, line_start, letter_start, line_end, letter_end) -> None:
         """
@@ -627,7 +899,7 @@ class TextEditor:  # (kengi.event.EventReceiver):
         if self.line_is_visible(line):
             x1, y1 = self.get_rect_coord_from_indizes(line, letter)
             x2, y2 = self.get_rect_coord_from_indizes(line, len(self.line_string_list[line]))
-            pygame.draw.rect(self.screen, (0, 0, 0), pygame.Rect(x1, y1, x2 - x1, self.line_gap))
+            pygame.draw.rect(kengi.get_surface(), (0, 0, 0), pygame.Rect(x1, y1, x2 - x1, self.line_gap))
 
     def highlight_from_start_to_letter(self, line, letter) -> None:
         """
@@ -636,7 +908,7 @@ class TextEditor:  # (kengi.event.EventReceiver):
         if self.line_is_visible(line):
             x1, y1 = self.get_rect_coord_from_indizes(line, 0)
             x2, y2 = self.get_rect_coord_from_indizes(line, letter)
-            pygame.draw.rect(self.screen, (0, 0, 0), pygame.Rect(x1, y1, x2 - x1, self.line_gap))
+            pygame.draw.rect(kengi.get_surface(), (0, 0, 0), pygame.Rect(x1, y1, x2 - x1, self.line_gap))
 
     def highlight_entire_line(self, line) -> None:
         """
@@ -645,7 +917,7 @@ class TextEditor:  # (kengi.event.EventReceiver):
         if self.line_is_visible(line):
             x1, y1 = self.get_rect_coord_from_indizes(line, 0)
             x2, y2 = self.get_rect_coord_from_indizes(line, len(self.line_string_list[line]))
-            pygame.draw.rect(self.screen, (0, 0, 0), pygame.Rect(x1, y1, x2 - x1, self.line_gap))
+            pygame.draw.rect(kengi.get_surface(), (0, 0, 0), pygame.Rect(x1, y1, x2 - x1, self.line_gap))
 
     def highlight_from_letter_to_letter(self, line, letter_start, letter_end) -> None:
         """
@@ -654,7 +926,7 @@ class TextEditor:  # (kengi.event.EventReceiver):
         if self.line_is_visible(line):
             x1, y1 = self.get_rect_coord_from_indizes(line, letter_start)
             x2, y2 = self.get_rect_coord_from_indizes(line, letter_end)
-            pygame.draw.rect(self.screen, (0, 0, 0), pygame.Rect(x1, y1, x2 - x1, self.line_gap))
+            pygame.draw.rect(kengi.get_surface(), (0, 0, 0), pygame.Rect(x1, y1, x2 - x1, self.line_gap))
 
     def caret_within_texteditor(self) -> bool:
         """
@@ -733,24 +1005,6 @@ class TextEditor:  # (kengi.event.EventReceiver):
 
                 self.highlight_lines(line_start, letter_start, line_end, letter_end)  # Actual highlighting
 
-    #def proc_event(self, ev, source):
-    def use_events(self, pygame_events, pressed_keys, shared, tinfo=None):
-        # needs to be called within a while loop to be able to catch key/mouse input 'n update visuals throughout use
-        self.cycleCounter = self.cycleCounter + 1
-        # first iteration
-        tmp = (self.editor_offset_X, self.editor_offset_Y, self.textAreaWidth, self.textAreaHeight)
-        if self.firstiteration_boolean:
-            # paint entire area to avoid pixel error beneath line numbers
-            pygame.draw.rect(self.screen, self.codingBackgroundColor, tmp)
-            self.firstiteration_boolean = False
-
-        self.handle_keyboard_input(pygame_events, pressed_keys, shared, tinfo)
-
-        mouse_pressed = pygame.mouse.get_pressed()
-        mouse_x, mouse_y = kengi.core.proj_to_vscreen(pygame.mouse.get_pos())
-        self._prev_mouse_x, self._prev_mouse_y = mouse_x, mouse_y
-        self.handle_mouse_input(pygame_events, mouse_x, mouse_y, mouse_pressed)
-
     # ++++++++++++++++++++++ usage, N.B. this should be in a model class
     def get_text_as_string(self) -> str:
         """
@@ -816,113 +1070,6 @@ class TextEditor:  # (kengi.event.EventReceiver):
         self.line_string_list = string.split('\n')
         self.maxLines = len(self.line_string_list)
         self.rerenderLineNumbers = True
-
-    # --------------------------------------------------------------------
-    #   KEYB MANAGEMENT
-    # --------------------------------------------------------------------
-
-    def handle_keyboard_input(self, pygame_events, pressed_keys, shstuff, tinfo=None):
-
-        for event in pygame_events:
-            if event.type == pygame.KEYDOWN:
-                ctrl_k_pressed = pressed_keys[pygame.K_LCTRL] or pressed_keys[pygame.K_RCTRL]
-                # alt_pressed = pressed_keys[pygame.K_RALT] or pressed_keys[pygame.K_LALT]
-
-                # how to exit prog
-                if event.key == pygame.K_ESCAPE:
-                    shstuff.kartridge_output = [2, 'niobepolis']
-                    return True
-
-                # ___ COMBINATION KEY INPUTS ___
-                # Functionality whether something is highlighted or not (highlight all / paste)
-                elif ctrl_k_pressed and event.key == pygame.K_a:
-                    self.highlight_all()
-                elif ctrl_k_pressed and event.key == pygame.K_v:
-                    self.handle_highlight_and_paste()
-                elif ctrl_k_pressed and event.key == pygame.K_s:
-                    print('**SAVE detected**')
-                    shstuff.disp_save_ico = tinfo + SAVE_ICO_LIFEDUR
-                    shstuff\
-                        .dump_content = self.get_text_as_string()
-
-                # Functionality for when something is highlighted (cut / copy)
-                elif self.dragged_finished and self.dragged_active:
-                    if (pressed_keys[pygame.K_LCTRL] or pressed_keys[pygame.K_RCTRL]) and event.key == pygame.K_x:
-                        self.handle_highlight_and_cut()
-                    elif (pressed_keys[pygame.K_LCTRL] or pressed_keys[pygame.K_RCTRL]) and event.key == pygame.K_c:
-                        self.handle_highlight_and_copy()
-                    else:
-                        self.handle_input_with_highlight(event)  # handle char input on highlight
-
-                # ___ SINGLE KEY INPUTS ___
-                else:
-                    numpad_ope = [
-                        pygame.K_KP_PERIOD, pygame.K_KP_DIVIDE, pygame.K_KP_MULTIPLY,
-                        pygame.K_KP_MINUS, pygame.K_KP_PLUS, pygame.K_KP_EQUALS
-                    ]
-
-                    self.reset_text_area_to_caret()  # reset visual area to include line of caret if necessary
-                    self.chosen_LetterIndex = int(self.chosen_LetterIndex)
-
-                    # print("event", event)
-
-                    # Detect tapping/holding of the "DELETE" and "BACKSPACE" key while something is highlighted
-                    if self.dragged_finished and self.dragged_active and \
-                            (event.unicode == '\x08' or event.unicode == '\x7f'):
-                        # create the uniform event for both keys so we don't have to write two functions
-                        deletion_event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_DELETE)
-                        self.handle_input_with_highlight(
-                            deletion_event)  # delete and backspace have the same functionality
-
-                    # ___ DELETIONS ___
-                    elif event.unicode == '\x08':  # K_BACKSPACE
-                        self.handle_keyboard_backspace()
-                        self.reset_text_area_to_caret()  # reset caret if necessary
-                    elif event.unicode == '\x7f':  # K_DELETE
-                        self.handle_keyboard_delete()
-                        self.reset_text_area_to_caret()  # reset caret if necessary
-
-                    # ___ NORMAL KEYS ___
-                    # This covers all letters and numbers (not those on numpad).
-                    elif len(pygame.key.name(event.key)) == 1:
-                        self.insert_unicode(event.unicode)
-                    elif event.unicode == '_':
-                        self.insert_unicode('_')
-
-                    # TODO enable numpad keys again, once the ktg VM is clean
-                    # ___ NUMPAD KEYS ___
-                    # for the numbers, numpad must be activated (mod = 4096)
-                    # elif event.mod == 4096 and 1073741913 <= event.key <= 1073741922:
-                    #    self.insert_unicode(event.unicode)
-
-                    # all other numpad keys can be triggered with & without mod
-                    elif event.key in numpad_ope:
-                        self.insert_unicode(event.unicode)
-
-                    # ___ SPECIAL KEYS ___
-                    elif event.key == pygame.K_TAB:  # TABULATOR
-                        self.handle_keyboard_tab()
-                    elif event.key == pygame.K_SPACE:  # SPACEBAR
-                        self.handle_keyboard_space()
-                    elif event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:  # RETURN
-                        self.handle_keyboard_return()
-                    elif event.key == pygame.K_UP:  # ARROW_UP
-                        self.handle_keyboard_arrow_up()
-                    elif event.key == pygame.K_DOWN:  # ARROW_DOWN
-                        self.handle_keyboard_arrow_down()
-                    elif event.key == pygame.K_RIGHT:  # ARROW_RIGHT
-                        self.handle_keyboard_arrow_right()
-                    elif event.key == pygame.K_LEFT:  # ARROW_LEFT
-                        self.handle_keyboard_arrow_left()
-                    else:
-                        if event.key not in [pygame.K_RSHIFT, pygame.K_LSHIFT, pygame.K_DELETE,
-                                             pygame.K_BACKSPACE, pygame.K_CAPSLOCK, pygame.K_LCTRL, pygame.K_RCTRL]:
-                            # We handled the keys separately
-                            # Capslock is apparently implicitly handled
-                            # when using it in combination
-                            print('*WARNING* No implementation for key: ', end='')
-                            print(pygame.key.name(event.key))
-        return False
 
     def insert_unicode(self, unicode) -> None:
         self.line_string_list[self.chosen_LineIndex] = self.line_string_list[self.chosen_LineIndex][
@@ -1305,91 +1452,9 @@ class TextEditor:  # (kengi.event.EventReceiver):
                 return copied_chars
         else:
             return ""
-
-    # --------------- future vue ----------------------
-    def do_paint(self):
-        # RENDERING 1 - Background objects
-        self.render_background_coloring()
-        self.render_line_numbers()
-
-        # RENDERING 2 - Lines
-        self.render_highlight(self._prev_mouse_x, self._prev_mouse_y)
-
-        # single-color text
-        list_of_dicts = self.get_single_color_dicts()
-        self.render_line_contents_by_dicts(list_of_dicts)
-
-        self.render_caret()
-        self.display_scrollbar()
-        self.clock.tick(self.FPS)
-
-    def render_background_coloring(self) -> None:
-        """
-        Renders background color of the text area.
-        """
-        bg_left = self.editor_offset_X + self.lineNumberWidth
-        bg_top = self.editor_offset_Y
-        bg_width = self.textAreaWidth - self.lineNumberWidth
-        bg_height = self.textAreaHeight
-        pygame.draw.rect(self.screen, self.codingBackgroundColor, (bg_left, bg_top, bg_width, bg_height))
-
-    def render_line_numbers(self):
-        """
-        While background rendering is done for all "line-slots"
-        (to overpaint remaining "old" numbers without lines)
-        we render line-numbers only for existing string-lines.
-        """
-        if self.displayLineNumbers and self.rerenderLineNumbers:
-            self.rerenderLineNumbers = False
-            line_numbers_y = self.editor_offset_Y  # init for first line
-            for x in range(self.showStartLine, self.showStartLine + self.showable_line_numbers_in_editor):
-
-                # background
-                r = (self.editor_offset_X, line_numbers_y, self.lineNumberWidth, self.line_gap)
-                pygame.draw.rect(self.screen, self.lineNumberBackgroundColor, r)  # to debug use: ,1) after r
-
-                # line number
-                if x < self.get_showable_lines():
-                    # x + 1 in order to start with line 1 (only display, logical it's the 0th item in the list
-                    text = self.currentfont.render(str(x + 1).zfill(2), self.txt_antialiasing, self.lineNumberColor)
-                    text_rect = text.get_rect()
-                    text_rect.center = pygame.Rect(r).center
-                    self.screen.blit(text, text_rect)  # render on center of bg block
-                line_numbers_y += self.line_gap
-
-    def render_line_contents_by_dicts(self, dicts) -> None:
-        # Preparation of the rendering:
-        self.yline = self.yline_start
-        first_line = self.showStartLine
-        if self.showable_line_numbers_in_editor < len(self.line_string_list):
-            # we got more text than we are able to display
-            last_line = self.showStartLine + self.showable_line_numbers_in_editor
-        else:
-            last_line = self.maxLines
-
-        # Actual line rendering based on dict-keys
-        for line_list in dicts[first_line: last_line]:
-            xcoord = self.xline_start
-            for a_dict in line_list:
-                surface = self.currentfont.render(a_dict['chars'], self.txt_antialiasing,
-                                                  a_dict['color'])  # create surface
-                self.screen.blit(surface, (xcoord, self.yline))  # blit surface onto screen
-                xcoord = xcoord + (len(a_dict['chars']) * self.letter_size_X)  # next line-part prep
-
-            self.yline += self.line_gap  # next line prep
-
-    def render_caret(self):
-        """
-        Called every frame. Displays a cursor for x frames, then none for x frames. Only displayed if line in which
-        caret resides is visible and there is no active dragging operation going on.
-        Dependent on FPS -> 5 intervalls per second
-        Creates 'blinking' animation
-        """
-        self.Trenn_counter += 1
-        if self.Trenn_counter > (self.FPS / 5) and self.caret_within_texteditor() and self.dragged_finished:
-            self.screen.blit(self.carret_img, (self.cursor_X, self.cursor_Y))
-            self.Trenn_counter = self.Trenn_counter % ((self.FPS / 5) * 2)
-# -------------- end of editor ---------------
+# ----------------------------------------------
+#   end of editor
+# ----------------------------------------------
 
 
 class Sharedstuff:
@@ -1400,18 +1465,9 @@ class Sharedstuff:
         self.screen = None
         self.editor = None
         self.file_label = None  # for showing what is being edited
-        self.dirtymodel = None
 
-
-ico_surf = None
-scr_size = None
-icosurf_pos = None
-e_manager = None
-lu_event = p_event = None
-editor_text_content = ''
-formatedtxt_obj = None
-gameover = False
-sharedstuff = None
+        self.editor_blob = None
+        self.editor_view = None
 
 
 class CustomGameTicker:
@@ -1424,9 +1480,6 @@ class CustomGameTicker:
         self.manager.post(self.lu_event)
         self.manager.post(self.paint_event)
         self.manager.update()
-
-
-ticker = None
 
 
 # - functions for the web -
@@ -1483,56 +1536,48 @@ def game_enter(vmstate):
     #    tt = ft.render('bidule: ' + vmstate.cedit_arg, False, (0, 250, 0))
     # ------------
 
-    sharedstuff.dirtymodel = TextEditor(
-        offset_x, offset_y, scr_size[0], scr_size[1]-offset_y, kengi.get_surface(), line_numbers_flag=True
+    temp_ref = sharedstuff.editor_blob = TextEditor(
+        offset_x, offset_y, scr_size[0], scr_size[1]-offset_y, line_numbers_flag=True
     )
-    # sharedstuff.dirtymodel.turn_on()
+    sharedstuff.file_label = temp_ref.currentfont.render(f'opened file= {fileinfo}', False, (0, 250, 0))
+    temp_ref.set_text_from_string(py_code)
 
-    sharedstuff.file_label = sharedstuff.dirtymodel.currentfont.render(f'opened file= {fileinfo}', False, (0, 250, 0))
-    sharedstuff.dirtymodel.set_text_from_string(py_code)
-
-    # sharedstuff.viewer = EditorView(offset_x, offset_y, ssize[0], ssize[1]-offset_y)
-    # sharedstuff.viewer.turn_on()
+    sharedstuff.editor_view = TextEditorView(temp_ref, MFPS)
+    sharedstuff.editor_view.turn_on()
 
 
 def game_update(t_info=None):
-    global gameover, sharedstuff, ticker
-    scr = sharedstuff.screen
-    if sharedstuff.dirtymodel.use_events(pygame.event.get(), pygame.key.get_pressed(), sharedstuff, t_info):
-        gameover = True
-        return
+    global gameover, sharedstuff, ticker, e_manager
+
+    ticker.lu_event.curr_t = t_info
+    ticker.refresh()  # will update models,view + proc the event manager
+
     if sharedstuff.kartridge_output:
         gameover = True
         return sharedstuff.kartridge_output
 
-    sharedstuff.dirtymodel.do_paint()
-    # ticker.refresh()
-
-    if sharedstuff.disp_save_ico:
-        if t_info > sharedstuff.disp_save_ico:
-            sharedstuff.disp_save_ico = None
-        scr.blit(ico_surf, icosurf_pos)
-
-    scr.blit(sharedstuff.file_label, (0, 0))
-    kengi.flip()
+    glclock.tick(MFPS)
 
 
 def game_exit(vmstate):
     global sharedstuff
-    if vmstate.cedit_arg is not None and sharedstuff.dump_content is not None:
-        # has to be shared with the VM, too
-        # let's hack the .cedit_arg attribute, use it as a return value container
-        vmstate.cedit_arg = katasdk.mt_a + vmstate.cedit_arg + katasdk.mt_b + sharedstuff.dump_content
-        print('.cedit_arg hacked!')
+    if vmstate:
+        if vmstate.cedit_arg is not None and sharedstuff.dump_content is not None:
+            # has to be shared with the VM, too
+            # let's hack the .cedit_arg attribute, use it as a return value container
+            vmstate.cedit_arg = katasdk.mt_a + vmstate.cedit_arg + katasdk.mt_b + sharedstuff.dump_content
+            print('.cedit_arg hacked!')
+
+    print('Editor, over')
     kengi.quit()
-    print('sortie de lediteur!')
 
 
 # --------------------------------------------
 #  Entry pt, local ctx
 # --------------------------------------------
-import time
 if __name__ == '__main__':
+    import time
+
     game_enter(katasdk.vmstate)
     while not gameover:
         uresult = game_update(time.time())

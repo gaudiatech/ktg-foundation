@@ -21,8 +21,11 @@ class TextEditorAsciiV(kengi.event.EventReceiver):
         kengi.ascii.set_char_size(10)
         self.codespace_ij_pos = (3, 0)
         self.codestart_ij_pos = (3, 0)
-        self.codespace_nbcolumns = 90
-        self.codespace_nbrows = 70
+
+        # * WARNING webctx editor will crash if this isnt properly set *
+        char_sz = 12
+        self.codespace_nbcolumns = int(kengi.defs.STD_SCR_SIZE[0]/char_sz) - 1  # instead of 80 (960/12)
+        self.codespace_nbrows = int(kengi.defs.STD_SCR_SIZE[1]/char_sz) - 1  # instead of 60 (720/12)
 
         self.flag_show_carret = True
         self.curr_cycle = 0
@@ -136,11 +139,12 @@ class TextEditorAsciiV(kengi.event.EventReceiver):
                 lastnum = self._mod.showStartLine + self.codespace_nbrows
                 if lastnum > self._mod.get_card_lines():
                     lastnum = self._mod.get_card_lines()
+
                 cpt = 0
-                for num in range(self._mod.showStartLine, lastnum):
+                for num in range(self._mod.showStartLine+1, 1+lastnum+self._mod.showStartLine):
                     nb_str_form = list('{: 3}'.format(num))
                     for i, single_ch in enumerate(nb_str_form):
-                        self._ascii_canvas.put_char(single_ch, [i, ybaseline + cpt], kengi.palettes.c64['blue'])
+                        self._ascii_canvas.put_char(single_ch, [1+i, cpt], kengi.palettes.c64['blue'])
                     cpt += 1
         else:
             scr.fill(self._editor_bgcolor)

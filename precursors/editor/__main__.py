@@ -10,10 +10,7 @@ import katagames_sdk as katasdk
 katasdk.bootstrap()
 
 
-# from TextEditor import TextEditor
-# from TextEditorView import TextEditorView  <- the old one
-# from TextEditorAsciiV import TextEditorAsciiV  <- the new one
-# import sharedstuff
+FOLDER_CART = 'cartridges'
 
 
 class Sharedstuff:
@@ -93,6 +90,8 @@ EngineEvTypes = kengi.event.EngineEvTypes
 class TextEditorAsciiV(kengi.event.EventReceiver):
     def __init__(self, ref_mod, maxfps):
         super().__init__()
+        self.locked_file = False
+
         self._mod = ref_mod
         self._maxfps = maxfps
         self.latest_t = None  # pr disposer pt de repere, combien de temps afficher save icon
@@ -137,7 +136,7 @@ class TextEditorAsciiV(kengi.event.EventReceiver):
         self.curr_cycle = 0
 
         # extra
-        self.icosurf = pygame.image.load('editor/myassets/saveicon.png')
+        self.icosurf = pygame.image.load('assets/(editor)saveicon.png')
         saveicon_size = self.icosurf.get_size()
         scr_size = kengi.get_surface().get_size()
         self.icosurf_pos = ((scr_size[0]-saveicon_size[0])//2, (scr_size[1]-saveicon_size[1])//2)
@@ -186,8 +185,8 @@ class TextEditorAsciiV(kengi.event.EventReceiver):
         sharedstuff.kartridge_output = [2, 'niobepolis']
 
     def _try_save_file(self, target_kart_id):
-        if (target_kart_id is None) or 'editor' == target_kart_id:
-            print('BLOCK: not allowed to overwrite the editor code')
+        if (target_kart_id is None) or self.locked_file:
+            print('BLOCK: not allowed to write')
         else:
             print('SAVE FILE: ', )
             # show save icon:
@@ -201,28 +200,33 @@ class TextEditorAsciiV(kengi.event.EventReceiver):
 
         # - special keys: enter, escape, backspace, delete
         if ev_obj.key == pygame.K_RETURN or ev_obj.key == pygame.K_KP_ENTER:
-            self._mod.handle_keyboard_return()
+            if not self.locked_file:
+                self._mod.handle_keyboard_return()
         elif ev_obj.key == pygame.K_ESCAPE:
             TextEditorAsciiV._exit_sig()
         elif ev_obj.unicode == '\x08':  # backspace
-            self._mod.handle_keyboard_backspace()
-            self._mod.reset_text_area_to_caret()
-        elif ev_obj.unicode == '\x7f':
-            self._mod.handle_keyboard_delete()
-            self._mod.reset_text_area_to_caret()
+            if not self.locked_file:
+                self._mod.handle_keyboard_backspace()
+                self._mod.reset_text_area_to_caret()
+        elif ev_obj.unicode == '\x7f':  # del
+            if not self.locked_file:
+                self._mod.handle_keyboard_delete()
+                self._mod.reset_text_area_to_caret()
 
         # - ctrl + key (a, x, c, v, s, z)
         elif uholding_ctrl and ev_obj.key == pygame.K_a:
             self._mod.highlight_all()
         elif uholding_ctrl and ev_obj.key == pygame.K_x:
             print('sig cut')
-            self._mod.handle_highlight_and_cut()
+            if not self.locked_file:
+                self._mod.handle_highlight_and_cut()
         elif uholding_ctrl and ev_obj.key == pygame.K_c:
             print('sig copy')
             self._mod.handle_highlight_and_copy()
         elif uholding_ctrl and ev_obj.key == pygame.K_v:
             print('sig paste')
-            self._mod.handle_highlight_and_paste()
+            if not self.locked_file:
+                self._mod.handle_highlight_and_paste()
         elif uholding_ctrl and ev_obj.key == pygame.K_s:
             if katasdk.vmstate:
                 self._try_save_file(katasdk.vmstate.cedit_arg)
@@ -241,10 +245,11 @@ class TextEditorAsciiV(kengi.event.EventReceiver):
             self._mod.handle_keyboard_arrow_left()
 
         # - input text
-        elif ev_obj.unicode in (' ', '_'):
-            self._mod.insert_unicode(ev_obj.unicode)
-        elif len(pygame.key.name(ev_obj.key)) == 1:  # normal keys
-            self._mod.insert_unicode(ev_obj.unicode)
+        elif not self.locked_file:
+            if ev_obj.unicode in (' ', '_'):
+                self._mod.insert_unicode(ev_obj.unicode)
+            elif len(pygame.key.name(ev_obj.key)) == 1:  # normal keys
+                self._mod.insert_unicode(ev_obj.unicode)
 
     def get_single_color_dicts(self, chosencolor):
         rendering_list = []
@@ -1260,7 +1265,6 @@ class TextEditor:
 lu_event = paint_ev = None
 e_manager = None
 
-
 # - functions for the web -
 def game_enter(vmstate):
     global ticker, lu_event, paint_ev, e_manager
@@ -1275,10 +1279,14 @@ def game_enter(vmstate):
     offset_x = 0  # offset from the left border of the pygame window
     offset_y = 0  # offset from the top border of the pygame window
 
+    existing_file = False
+
     # set text content for the editor
     if vmstate is None:
         py_code = DUMMY_PYCODE  # just a sample, like just like a LoremIpsum.py ...
+        dummy_file = True
     else:
+        dummy_file = False
         if vmstate.cedit_arg is None:
             # on peut pogner l'editeur pour montrer son code
             fileinfo = 'editor'
@@ -1286,10 +1294,12 @@ def game_enter(vmstate):
             fileinfo = vmstate.cedit_arg
 
         # - fetch code for editing
-        if fileinfo in vmstate.gamelist_func():
+        if vmstate.has_game(fileinfo):
+            existing_file = True
+
             curr_edition_info = '(editing an existing file {})'.format(fileinfo)
             # AJOUT mercredi 20/04/22 ca peut que marcher en local cela!
-            f = open(f'roms/{fileinfo}.py', 'r')
+            f = open(f'{FOLDER_CART}/{fileinfo}.py', 'r')
             py_code = f.read()
             f.close()
         else:  # game creation
@@ -1321,6 +1331,11 @@ def game_enter(vmstate):
 
     editor_view = TextEditorAsciiV(editor_blob, MFPS)
     editor_view.turn_on()
+
+    if not dummy_file:
+        if existing_file:
+            if vmstate.has_ro_flag(fileinfo):
+                editor_view.locked_file = True
 
 
 def game_update(t_info=None):

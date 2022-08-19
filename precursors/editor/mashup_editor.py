@@ -59,6 +59,10 @@ class Cloud(pygame.sprite.Sprite):
         self.rect.move_ip(-5, 0)
         if self.rect.right < 0:
             self.kill()
+
+# *---*thing.py*---*
+print('hello')
+
 """
 
 # ----------------------------------
@@ -137,7 +141,7 @@ class TextEditorAsciiV(kengi.event.EventReceiver):
         self.curr_cycle = 0
 
         # extra
-        self.icosurf = pygame.image.load('assets/(editor)saveicon.png')
+        self.icosurf = pygame.image.load('myassets/saveicon.png')
         saveicon_size = self.icosurf.get_size()
         scr_size = kengi.get_surface().get_size()
         self.icosurf_pos = ((scr_size[0] - saveicon_size[0]) // 2, (scr_size[1] - saveicon_size[1]) // 2)
@@ -231,6 +235,9 @@ class TextEditorAsciiV(kengi.event.EventReceiver):
         elif uholding_ctrl and ev_obj.key == pygame.K_s:
             if katasdk.vmstate:
                 self._try_save_file(katasdk.vmstate.cedit_arg)
+
+        elif uholding_ctrl and ev_obj.key == pygame.K_d:  # charge contenu de thing.py
+            self._mod.switch_file()
 
         elif uholding_ctrl and ev_obj.key == pygame.K_z:
             print('undo not implemented yet!')  # TODO
@@ -345,9 +352,15 @@ class TextEditorAsciiV(kengi.event.EventReceiver):
 #  start editor
 # ----------------------
 class TextEditor:
+    """
+    A priori cette classe est un modèle, mais ça reste assez sale,
+    faudrait nettoyer et retirer tt ce qui concerne la vue/controle
+    """
 
     def __init__(self, offset_x, offset_y, text_area_width, text_area_height, line_numbers_flag=False):
         self.emu_paperclip = ''
+        self.fake_layout = None  # stores an object, instance of FakeProjectLayout
+        self.curr_vfile = 'main.py'
 
         # kengi+sdk flavored font obj
         # TODO passer en param letter size Y
@@ -431,6 +444,19 @@ class TextEditor:
 
         # flag to tell that line number need to be re-drawn
         self.rerenderLineNumbers = True
+
+    # -------------- activates when pressed ctrl+d in the TextEditorV -------------
+    def switch_file(self):
+        if self.curr_vfile == 'main.py':
+            self.curr_vfile = 'thing.py'
+            self.set_text_from_list(
+                self.fake_layout['thing.py']
+            )
+        else:
+            self.curr_vfile = 'main.py'
+            self.set_text_from_list(
+                self.fake_layout['main.py']
+            )
 
     def reset_cursor(self):
         if self.displayLineNumbers:
@@ -1269,9 +1295,38 @@ class TextEditor:
 # ----------------------------------------------
 #   end of editor
 # ----------------------------------------------
-
 lu_event = paint_ev = None
 e_manager = None
+
+
+class FakeProjectLayout:
+    """
+    can use several files, by default its only main.py
+    """
+    def __init__(self, mashup_code):
+        # lets distinguish virtual .py files
+        temp = mashup_code.splitlines()
+        main = list()
+        rest = list()
+        coupe = None
+        # ---------------------
+        #  il suffirait de généraliser cet algo pour qu'on puisse gérer plusieurs fichiers et pas que 2,
+        #  et que l'on puisse choisir son nom xxx.py au lieu d'avoir choisi thing.py en dur!
+        # ---------------------
+        for k, li in enumerate(temp):
+            if li == '# *---*thing.py*---*':
+                coupe = k
+                break
+        if coupe:
+            main.extend(temp[:coupe])
+            rest.extend(temp[coupe+1:])
+        else:
+            main.extend(temp)
+        self.main = main
+        self.thing = rest
+
+    def __getitem__(self, item):  # item should be main.py for example
+        return getattr(self, item.split('.')[0])
 
 
 # - functions for the web -
@@ -1290,7 +1345,7 @@ def game_enter(vmstate):
 
     # set text content for the editor
     if vmstate is None:
-        py_code = DUMMY_PYCODE  # just a sample, like just like a LoremIpsum.py ...
+        py_code = FakeProjectLayout(DUMMY_PYCODE)  # just a sample, like just like a LoremIpsum.py ...
         dummy_file = True
     else:
         dummy_file = False
@@ -1303,12 +1358,11 @@ def game_enter(vmstate):
         # - fetch code for editing
         if vmstate.has_game(fileinfo):
             existing_file = True
-
             curr_edition_info = '(editing an existing file {})'.format(fileinfo)
             # AJOUT mercredi 20/04/22 ca peut que marcher en local cela!
-            f = open(f'{FOLDER_CART}/{fileinfo}.py', 'r')
-            py_code = f.read()
-            f.close()
+            with open(f'{FOLDER_CART}/{fileinfo}.py', 'r') as ff:
+                py_code = FakeProjectLayout(ff.read())
+
         else:  # game creation
             curr_edition_info = '(creating the new file {})'.format(fileinfo)
             py_code = vmstate.blankfile_template
@@ -1334,8 +1388,10 @@ def game_enter(vmstate):
         offset_x, offset_y,  # offset_y is 0
         scr_size[0], scr_size[1] - offset_y, line_numbers_flag=True
     )
+    editor_blob.fake_layout = py_code
+
     sharedstuff.file_label = None  # editor_blob.currentfont.render(f'opened file= {fileinfo}', False, (0, 250, 0))
-    editor_blob.set_text_from_string(py_code)
+    editor_blob.set_text_from_list(py_code['main.py'])
 
     editor_view = TextEditorAsciiV(editor_blob, MFPS)
     editor_view.turn_on()

@@ -37,7 +37,7 @@ my_fonts = {
     'moderne': (None, 32),
     'moderne_big': (None, 64)
 }
-SCR_W = SCR_H = None  # to be set in pgm body
+scr_width = scr_height = None  # to be set in pgm body
 
 
 my_colors = {
@@ -138,7 +138,7 @@ def glvars_init_fonts_n_colors():
 # -------------------fin pseudo glvars mod -----------------------
 
 
-SCR_W, SCR_H = -1, -1  # will be set when run_game() called
+scr_width, scr_height = -1, -1  # will be set when run_game() called
 
 GameStates = enum_builder(
     # avant on utilisait Login defini dans ce mm programme,
@@ -372,7 +372,7 @@ class MenuView(EventReceiver):
 
     def __init__(self, ref_mod):
         super().__init__()
-        self.__class__.POS_ETQ_VER = (8, SCR_H - 24)
+        self.__class__.POS_ETQ_VER = (8, scr_height - 24)
         self.FG_COLOR = glvars.colors['c_lightpurple']
         self.TITLE_COLOR = glvars.colors['c_skin']
         self.BG_COLOR = glvars.colors['c_purple']
@@ -404,12 +404,12 @@ class MenuView(EventReceiver):
         self._walker_speed = dict()
         for k in range(20):
             self._walker_speed[k] = random.randint(1, 6)
-            i, j = random.randint(0, SCR_W - 1), random.randint(0, SCR_H - 1)
+            i, j = random.randint(0, scr_width - 1), random.randint(0, scr_height - 1)
             self._allwalker_pos.append([i, j])
         self._label_titre = self._bigfont.render(
             self.REAL_TITLE, False, self.TITLE_COLOR
         )
-        self._pos_titre = (SCR_W // 2 - (self._label_titre.get_size()[0] // 2), 50)
+        self._pos_titre = (scr_width // 2 - (self._label_titre.get_size()[0] // 2), 50)
         self.mod = ref_mod
         self._hugefont = glvars.fonts['moderne']
         self._font = glvars.fonts['tiny_monopx']
@@ -437,7 +437,7 @@ class MenuView(EventReceiver):
     def _refresh_rect(self, code, adhoc_label):
         tmp_rect = adhoc_label.get_rect()
         base_y = 128
-        base_x = SCR_W // 2
+        base_x = scr_width // 2
         offset = 40
         tmp = (MenuModel.CHOIX_LOGIN, MenuModel.CHOIX_START, MenuModel.CHOIX_CRED, MenuModel.CHOIX_QUIT)
 
@@ -522,7 +522,7 @@ class MenuView(EventReceiver):
                 spd_based_color = glvars.colors['c_brown']
             else:
                 spd_based_color = glvars.colors['c_gray1']
-            pos[1] = pos[1] % SCR_H
+            pos[1] = pos[1] % scr_height
             pygame.draw.rect(screen, spd_based_color, (pos[0], pos[1], 4, 6))
         # - dessin titre
         if random.random() < 0.1:
@@ -1328,7 +1328,7 @@ class TetrisState(BaseGameState):
 
         # - view creation
         self.ma_vue = TetrisView(
-            (SCR_W,SCR_H), glvars.colors['c_purple'], glvars.colors['c_lightpurple']
+            (scr_width, scr_height), glvars.colors['c_purple'], glvars.colors['c_lightpurple']
         )
         self.ma_vue.turn_on()
         # - ctrl
@@ -1421,7 +1421,7 @@ def tsl(cle):
 
 if __name__ == "__main__":
     kengi.init(1)
-    SCR_W, SCR_H = kengi.get_surface().get_size()
+    scr_width, scr_height = kengi.get_surface().get_size()
 
     glvars.CHOSEN_LANG = 'en'
     init_repo_strings(glvars.CHOSEN_LANG)

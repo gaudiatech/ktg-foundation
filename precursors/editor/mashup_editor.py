@@ -6,10 +6,11 @@ if you need to tinker with stuff, the recommanded procedure is:
  - then update the current file
 """
 import math
+import re
 import katagames_sdk as katasdk
 
-katasdk.bootstrap()
 
+katasdk.bootstrap()
 FOLDER_CART = 'cartridges'
 
 
@@ -38,8 +39,7 @@ MFPS = 50
 SAVE_ICO_LIFEDUR = 1.33  # sec
 
 # constant to have smth just like "lorem ipsum" text, if needed
-DUMMY_PYCODE = """
-# Define the cloud object by extending pygame.sprite.Sprite
+DUMMY_PYCODE = """# Define the cloud object by extending pygame.sprite.Sprite
 # Use an image for a better-looking sprite
 class Cloud(pygame.sprite.Sprite):
     def __init__(self):
@@ -59,10 +59,18 @@ class Cloud(pygame.sprite.Sprite):
         self.rect.move_ip(-5, 0)
         if self.rect.right < 0:
             self.kill()
-
-# *---*thing.py*---*
+# >>>megaman.py
+for i in range(3, 112):
+    for j in range(9, 88):
+        print('..', i*j, end='')
+# this is a random comment
+print('hi mom')
+# >>>kappa.py
+x = input('hi bro, name? ')
+# this is crazy!
+print(f"homie {x}")
+# >>>alpha.py
 print('hello')
-
 """
 
 # ----------------------------------
@@ -113,7 +121,10 @@ class TextEditorAsciiV(kengi.event.EventReceiver):
         # * WARNING webctx editor will crash if this isnt properly set *
         char_sz = 12
         self.codespace_nbcolumns = int(kengi.defs.STD_SCR_SIZE[0] / char_sz) - 6  # instead of 80 (960/12)
-        self.codespace_nbrows = int(kengi.defs.STD_SCR_SIZE[1] / char_sz) - 2  # instead of 60 (720/12)
+        self.codespace_nbrows = int(kengi.defs.STD_SCR_SIZE[1] / char_sz) - 2 - 1  # instead of 60 (720/12)
+        # -2 due to border
+        # -1 so we can display the info status msg AS WELL
+
         kengi.ascii.set_char_size(char_sz)
 
         # -------
@@ -132,8 +143,8 @@ class TextEditorAsciiV(kengi.event.EventReceiver):
         # for faster display, let's pre-compute some stuff
         bg_left, bg_top = ascii_canvas.cpos_to_screen(self.codespace_ij_pos)
         bg_width, bg_height = self.codespace_nbcolumns, self.codespace_nbrows
-        bg_width *= kengi.ascii.get_char_size()
-        bg_height *= kengi.ascii.get_char_size()
+        bg_width *= char_sz
+        bg_height *= char_sz
         self._code_rect = (bg_left, bg_top, bg_width, bg_height)
 
         # other
@@ -169,6 +180,11 @@ class TextEditorAsciiV(kengi.event.EventReceiver):
             ev.screen.fill(self._editor_bgcolor)
             self._render_leftbox(ev.screen)  # TODO make box disappear if editor no-show-line toggled
             self._render_line_num(ev.screen)
+
+            # render the txt msg
+            _, bsupy = kengi.ascii.get_bounds()
+            for k, car in enumerate('{ '+self._mod.status_info_msg+' }'):
+                ascii_canvas.put_char(car, [7 + k, bsupy-1], kengi.pal.c64['lightgreen'])
 
             self._render_codeblock(ev.screen)
 
@@ -233,8 +249,12 @@ class TextEditorAsciiV(kengi.event.EventReceiver):
             if not self.locked_file:
                 self._mod.handle_highlight_and_paste()
         elif uholding_ctrl and ev_obj.key == pygame.K_s:
-            if katasdk.vmstate:
+            # ds tous les cas faut refresh
+            if katasdk.vmstate:  # RUN WITHOUT a vm
                 self._try_save_file(katasdk.vmstate.cedit_arg)
+            else:
+                # TODO need to refresh so we re-split if the user has entered a new comment in the form # >>>myfile.py
+                pass
 
         elif uholding_ctrl and ev_obj.key == pygame.K_d:  # charge contenu de thing.py
             self._mod.switch_file()
@@ -267,7 +287,8 @@ class TextEditorAsciiV(kengi.event.EventReceiver):
         return rendering_list
 
     def _render_leftbox(self, scr):
-        _, bsupy = kengi.ascii.get_bounds()
+        bsupx, bsupy = kengi.ascii.get_bounds()
+        bsupy -= 1
         limite_boitex = self.codespace_ij_pos[0]
         _ac = ascii_canvas
         col = self.color_textcode
@@ -286,6 +307,9 @@ class TextEditorAsciiV(kengi.event.EventReceiver):
         _ac.put_char(_ac.CODE_LINE_NE, [limite_boitex - 1, 0], col)
         _ac.put_char(_ac.CODE_LINE_SE, [limite_boitex - 1, bsupy - 1], col)
         _ac.put_char(_ac.CODE_LINE_SW, [0, bsupy - 1], col)
+
+        for i in range(0, bsupx):
+            _ac.put_char(_ac.CODE_FILL, [i, bsupy], kengi.pal.punk[4])
 
     def _render_line_num(self, scr):
         if self._mod.displayLineNumbers:
@@ -357,11 +381,7 @@ class TextEditor:
     faudrait nettoyer et retirer tt ce qui concerne la vue/controle
     """
 
-    def __init__(self, offset_x, offset_y, text_area_width, text_area_height, line_numbers_flag=False):
-        self.emu_paperclip = ''
-        self.fake_layout = None  # stores an object, instance of FakeProjectLayout
-        self.curr_vfile = 'main.py'
-
+    def __init__(self, fileslayout, offset_x, offset_y, text_area_width, text_area_height, line_numbers_flag=False):
         # kengi+sdk flavored font obj
         # TODO passer en param letter size Y
         # self.currentfont = kengi.gui.ImgBasedFont('xxxxassets_editor_myassetsgibson1_font.xxx', (87, 77, 11))
@@ -393,7 +413,8 @@ class TextEditor:
 
         linespacing = 2
         self.line_gap = self.letter_size_Y + linespacing
-        self.showable_line_numbers_in_editor = int(math.floor(self.textAreaHeight / self.line_gap))
+        # how many lines to show
+        self.showable_line_numbers_in_editor = int(math.floor(self.textAreaHeight / self.line_gap)) - 1
 
         for i in range(self.maxLines):  # from 0 to maxLines:
             self.line_string_list.append("")  # Add a line
@@ -445,18 +466,21 @@ class TextEditor:
         # flag to tell that line number need to be re-drawn
         self.rerenderLineNumbers = True
 
+        # - update data
+        # status info= whats displayed on the very last line editor
+        self.status_info_msg = ''
+
+        self.emu_paperclip = ''
+        self.fake_layout = fileslayout  # stores an object, instance of FakeProjectLayout
+        self.curr_vfile_idx = -1
+        self.switch_file()  # so we target 'main.py'
+
     # -------------- activates when pressed ctrl+d in the TextEditorV -------------
     def switch_file(self):
-        if self.curr_vfile == 'main.py':
-            self.curr_vfile = 'thing.py'
-            self.set_text_from_list(
-                self.fake_layout['thing.py']
-            )
-        else:
-            self.curr_vfile = 'main.py'
-            self.set_text_from_list(
-                self.fake_layout['main.py']
-            )
+        self.curr_vfile_idx = (self.curr_vfile_idx + 1) % self.fake_layout.size
+        vfilename = self.fake_layout.file_order[self.curr_vfile_idx]
+        self.set_text_from_list(self.fake_layout[vfilename])
+        self.status_info_msg = f"Editing {vfilename}"
 
     def reset_cursor(self):
         if self.displayLineNumbers:
@@ -1305,28 +1329,56 @@ class FakeProjectLayout:
     """
     def __init__(self, mashup_code):
         # lets distinguish virtual .py files
-        temp = mashup_code.splitlines()
-        main = list()
-        rest = list()
-        coupe = None
-        # ---------------------
-        #  il suffirait de généraliser cet algo pour qu'on puisse gérer plusieurs fichiers et pas que 2,
+        self.files_to_content = dict()
+        self.file_order = None
+        self._disting_files(mashup_code)
+
+    @property
+    def size(self):
+        return len(self.file_order)
+
+    def _disting_files(self, rawcode):
+        all_lines = rawcode.splitlines()
+        #  on généralise pour qu'on puisse gérer plusieurs fichiers et pas que 2,
         #  et que l'on puisse choisir son nom xxx.py au lieu d'avoir choisi thing.py en dur!
-        # ---------------------
-        for k, li in enumerate(temp):
-            if li == '# *---*thing.py*---*':
-                coupe = k
-                break
-        if coupe:
-            main.extend(temp[:coupe])
-            rest.extend(temp[coupe+1:])
+        groups = re.findall(r"# >>>(\b[a-z]+\b\.py)", rawcode)
+
+        # find starts
+        starts = dict()
+        order = list()
+        if len(groups):
+            for vfilename in groups:
+                for k, li in enumerate(all_lines):
+                    teststr = f"# >>>{vfilename}"
+                    if li == teststr:
+                        starts[vfilename] = k+1
+                        order.append(vfilename)
+
+        # find stops
+        stops = dict()
+        order.insert(0, 'main.py')
+        if len(order):
+            kk = 1
+            while kk < len(order):
+                nxt = order[kk]
+                stops[order[kk-1]] = starts[nxt]-2
+                kk += 1
+            stops[order[kk - 1]] = len(all_lines)-1
         else:
-            main.extend(temp)
-        self.main = main
-        self.thing = rest
+            order.append('main.py')
+            stops['main.py'] = len(all_lines)-1
+        starts['main.py'] = 0
+        print('starts:\n', starts)
+        print('stops:\n', stops)
+
+        for e in order:
+            self.files_to_content[e] = all_lines[starts[e]:stops[e]+1]
+        order.remove('main.py')
+        order.sort()
+        self.file_order = ['main.py'] + order
 
     def __getitem__(self, item):  # item should be main.py for example
-        return getattr(self, item.split('.')[0])
+        return self.files_to_content[item]
 
 
 # - functions for the web -
@@ -1385,11 +1437,10 @@ def game_enter(vmstate):
 
     scr_size = paint_ev.screen.get_size()
     editor_blob = TextEditor(
+        py_code,
         offset_x, offset_y,  # offset_y is 0
         scr_size[0], scr_size[1] - offset_y, line_numbers_flag=True
     )
-    editor_blob.fake_layout = py_code
-
     sharedstuff.file_label = None  # editor_blob.currentfont.render(f'opened file= {fileinfo}', False, (0, 250, 0))
     editor_blob.set_text_from_list(py_code['main.py'])
 

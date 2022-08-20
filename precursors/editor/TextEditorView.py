@@ -21,6 +21,8 @@ class TextEditorView(kengi.event.EventReceiver):
         if shared:
             sharedstuff = shared
         super().__init__()
+        self.scrollBarWidth = 8  # const
+
         self._blob = editorblob_obj  # blob bc its not 100% refactored, yet
         self._maxfps = maxfps
         self.latest_t = None
@@ -244,7 +246,7 @@ class TextEditorView(kengi.event.EventReceiver):
         first_line = self._blob.showStartLine
         if self._blob.showable_line_numbers_in_editor < len(self._blob.line_string_list):
             # we got more text than we are able to display
-            last_line = self.showStartLine + self.showable_line_numbers_in_editor
+            last_line = self._blob.showStartLine + self._blob.showable_line_numbers_in_editor
         else:
             last_line = self._blob.maxLines
 
@@ -471,10 +473,10 @@ class TextEditorView(kengi.event.EventReceiver):
             w = self.scrollBarWidth
 
             # line below: -2 for space between edge & scrollbar
-            x = self.editor_offset_X + self.textAreaWidth - self.scrollBarWidth - 2
-            y = self.editor_offset_Y + (w / 2) + (self.textAreaHeight * ((self.showStartLine * 1.0) / self.maxLines))
+            x = self._blob.editor_offset_X + self._blob.textAreaWidth - self.scrollBarWidth - 2
+            y = self._blob.editor_offset_Y + (w / 2) + (self._blob.textAreaHeight * ((self._blob.showStartLine * 1.0) / self._blob.maxLines))
             y = int(y)
-            h = (self.textAreaHeight - w) * ((self.showable_line_numbers_in_editor * 1.0) / self.maxLines)
+            h = (self._blob.textAreaHeight - w) * ((self._blob.showable_line_numbers_in_editor * 1.0) / self._blob.maxLines)
             h = int(h)
 
             self.scrollbar = pygame.Rect(x, y, w, h)

@@ -1,7 +1,16 @@
 import time
 import katagames_sdk as katasdk
 katasdk.bootstrap()
-from TextEditor import TextEditor, FakeProjectLayout, sharedstuff
+
+# ++ use the lean version
+# from model import TextEditor, VirtualFileset, sharedstuff_obj
+
+# ++ use legacy model
+from TextEditor import TextEditor, FakeProjectLayout
+from TextEditor import sharedstuff as sharedstuff_obj
+VirtualFileset = FakeProjectLayout
+
+# rest of import instructions...
 from TextEditorAsciiV import TextEditorAsciiV
 from TextEditorView import TextEditorView
 from sharedstuff import DUMMY_PYCODE, FOLDER_CART, MFPS
@@ -28,7 +37,7 @@ def game_enter(vmstate):
     existing_file = False
     # set text content for the editor
     if vmstate is None:
-        py_code = FakeProjectLayout(DUMMY_PYCODE)  # just a sample, like just like a LoremIpsum.py ...
+        pycode_vfileset  = VirtualFileset(DUMMY_PYCODE)  # just a sample, like just like a LoremIpsum.py ...
         dummy_file = True
     else:
         dummy_file = False
@@ -43,10 +52,10 @@ def game_enter(vmstate):
             curr_edition_info = '(editing an existing file {})'.format(fileinfo)
             # AJOUT mercredi 20/04/22 ca peut que marcher en local cela!
             with open(f'{FOLDER_CART}/{fileinfo}.py', 'r') as ff:
-                py_code = FakeProjectLayout(ff.read())
+                pycode_vfileset = VirtualFileset(ff.read())
         else:  # game creation
             curr_edition_info = '(creating the new file {})'.format(fileinfo)
-            py_code = vmstate.blankfile_template
+            pycode_vfileset = vmstate.blankfile_template
         print(curr_edition_info)
 
     # --- another way to do it ---
@@ -65,16 +74,16 @@ def game_enter(vmstate):
 
     scr_size = paint_ev.screen.get_size()
     editor_blob = TextEditor(
-        py_code,
+        pycode_vfileset,
         offset_x, offset_y,  # offset_y is 0
         scr_size[0], scr_size[1] - offset_y, line_numbers_flag=True
     )
-    sharedstuff.file_label = None  # editor_blob.currentfont.render(f'opened file= {fileinfo}', False, (0, 250, 0))
-    editor_blob.set_text_from_list(py_code['main.py'])
-    sharedstuff.screen = kengi.get_surface()
+    sharedstuff_obj.file_label = None  # editor_blob.currentfont.render(f'opened file= {fileinfo}', False, (0, 250, 0))
+    editor_blob.set_text_from_list(pycode_vfileset ['main.py'])
+    sharedstuff_obj.screen = kengi.get_surface()
     editor_blob.currentfont = pygame.font.Font(None, 24)
-    editor_view = TextEditorAsciiV(editor_blob, MFPS) if not legacy_view\
-        else TextEditorView(editor_blob, MFPS, shared=sharedstuff)
+    editor_view = TextEditorAsciiV(editor_blob, MFPS, shared=sharedstuff_obj) if not legacy_view\
+        else TextEditorView(editor_blob, MFPS, shared=sharedstuff_obj)
     editor_view.turn_on()
     if not dummy_file:
         if existing_file:
@@ -89,17 +98,17 @@ def game_update(t_info=None):
     e_manager.post(paint_ev)
     e_manager.update()
     kengi.flip()
-    if sharedstuff.kartridge_output:
+    if sharedstuff_obj.kartridge_output:
         gameover = True
-        return sharedstuff.kartridge_output
+        return sharedstuff_obj.kartridge_output
 
 
 def game_exit(vmstate):
     if vmstate:
-        if vmstate.cedit_arg is not None and sharedstuff.dump_content is not None:
+        if vmstate.cedit_arg is not None and sharedstuff_obj.dump_content is not None:
             # has to be shared with the VM too
             # Let's hack the .cedit_arg attribute and use it as a return value container
-            vmstate.cedit_arg = katasdk.mt_a + vmstate.cedit_arg + katasdk.mt_b + sharedstuff.dump_content
+            vmstate.cedit_arg = katasdk.mt_a + vmstate.cedit_arg + katasdk.mt_b + sharedstuff_obj.dump_content
             print('.cedit_arg hacked!')
     print('Editor, over')
     kengi.quit()

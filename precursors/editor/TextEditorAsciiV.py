@@ -1,11 +1,10 @@
 import katagames_sdk as katasdk
-import sharedstuff
 
 
 kengi = katasdk.kengi
 pygame = kengi.pygame
 EngineEvTypes = kengi.event.EngineEvTypes
-
+sharedstuff = None
 
 # - constants
 SHOW_ICON_DURAT = 2  # sec
@@ -29,7 +28,10 @@ ascii_canvas = kengi.ascii
 
 
 class TextEditorAsciiV(kengi.event.EventReceiver):
-    def __init__(self, ref_mod, maxfps):
+    def __init__(self, ref_mod, maxfps, shared=None):
+        global sharedstuff
+        if shared:
+            sharedstuff = shared
         super().__init__()
         self.locked_file = False
 

@@ -611,7 +611,6 @@ class TextEditor:
         self.showStartLine = 0
         for i in range(self.maxLines):  # from 0 to maxLines:
             self.line_string_list.append("")  # Add a line
-
         # reset caret
         self.firstiteration_boolean = True  # redraws background
         self.rerenderLineNumbers = True

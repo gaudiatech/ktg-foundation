@@ -44,16 +44,16 @@ class TextEditor:
         self.chosen_LetterIndex = 0
         self.chosen_LineIndex = 0
 
-        # so reset_cursor doesnt crash
-        self.xline_start_offset = 0
+        # this line is here so the text is not overriding column dedicated to  line number display...
+        self.xline_start_offset = 25
 
         # not sure if the following block is super useful, ive added it only to support 4 arrows operations
-        self.line_gap = 3
         self.showable_line_numbers_in_editor = 15  # -->maybe can have a default val, then we set real val via the view
         self.lineHeight = 20  # -------->view
         self.letter_size_X = 8  # -------->view
         self.lineNumberWidth = 24  # --------->view
         self.txt_antialiasing = False  #-->view
+        self.line_gap = self.lineHeight + 3
 
         self.yline_start = offset_y  # cest pas dupe val?
 
@@ -337,64 +337,5 @@ class VirtualClipboard:  # simulation
     @classmethod
     def paste(cls):
         return cls.strv
-
-
-class VirtualFileset:
-    """
-    can use several files, by default its only main.py
-    """
-    def __init__(self, mashup_code):
-        # lets distinguish virtual .py files
-        self.files_to_content = dict()
-        self.file_order = None
-        self._disting_files(mashup_code)
-
-    @property
-    def size(self):
-        return len(self.file_order)
-
-    def _disting_files(self, rawcode):
-        all_lines = rawcode.splitlines()
-        #  on généralise pour qu'on puisse gérer plusieurs fichiers et pas que 2,
-        #  et que l'on puisse choisir son nom xxx.py au lieu d'avoir choisi thing.py en dur!
-        groups = re.findall(r"# >>>(\b[a-z]+\b\.py)", rawcode)
-
-        # find starts
-        starts = dict()
-        order = list()
-        if len(groups):
-            for vfilename in groups:
-                for k, li in enumerate(all_lines):
-                    teststr = f"# >>>{vfilename}"
-                    if li == teststr:
-                        starts[vfilename] = k+1
-                        order.append(vfilename)
-
-        # find stops
-        stops = dict()
-        order.insert(0, 'main.py')
-        if len(order):
-            kk = 1
-            while kk < len(order):
-                nxt = order[kk]
-                stops[order[kk-1]] = starts[nxt]-2
-                kk += 1
-            stops[order[kk - 1]] = len(all_lines)-1
-        else:
-            order.append('main.py')
-            stops['main.py'] = len(all_lines)-1
-        starts['main.py'] = 0
-        print('starts:\n', starts)
-        print('stops:\n', stops)
-
-        for e in order:
-            self.files_to_content[e] = all_lines[starts[e]:stops[e]+1]
-        order.remove('main.py')
-        order.sort()
-        self.file_order = ['main.py'] + order
-
-    def __getitem__(self, item):  # item should be main.py for example
-        return self.files_to_content[item]
-
 
 sharedstuff_obj = Sharedstuff()

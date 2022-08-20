@@ -2,19 +2,25 @@ import time
 import katagames_sdk as katasdk
 katasdk.bootstrap()
 
+from ScProviderFactory import ScProviderFactory
+
+# i try to make the model lightweight... {
 # ++ use the lean version
-# from model import TextEditor, VirtualFileset, sharedstuff_obj
+from model import TextEditor, sharedstuff_obj
 
 # ++ use legacy model
-from TextEditor import TextEditor, FakeProjectLayout
-from TextEditor import sharedstuff as sharedstuff_obj
-VirtualFileset = FakeProjectLayout
+# from TextEditor import TextEditor
+# from TextEditor import sharedstuff as sharedstuff_obj
+
+# end of attempts}
+
+from VirtualFilesetBuffer import VirtualFilesetBuffer
+
 
 # rest of import instructions...
 from TextEditorAsciiV import TextEditorAsciiV
 from TextEditorView import TextEditorView
-from sharedstuff import DUMMY_PYCODE, FOLDER_CART, MFPS
-
+from sharedstuff import MFPS
 
 kengi = katasdk.kengi
 pygame = kengi.pygame
@@ -37,7 +43,9 @@ def game_enter(vmstate):
     existing_file = False
     # set text content for the editor
     if vmstate is None:
-        pycode_vfileset  = VirtualFileset(DUMMY_PYCODE)  # just a sample, like just like a LoremIpsum.py ...
+        # local
+        provider = ScProviderFactory.build(local_target='LoremIpsum.py')
+        pycode_vfileset = VirtualFilesetBuffer(provider.get_source_code())  # just a sample, like just like a LoremIpsum.py ...
         dummy_file = True
     else:
         dummy_file = False
@@ -52,7 +60,7 @@ def game_enter(vmstate):
             curr_edition_info = '(editing an existing file {})'.format(fileinfo)
             # AJOUT mercredi 20/04/22 ca peut que marcher en local cela!
             with open(f'{FOLDER_CART}/{fileinfo}.py', 'r') as ff:
-                pycode_vfileset = VirtualFileset(ff.read())
+                pycode_vfileset = VirtualFilesetBuffer(ff.read())
         else:  # game creation
             curr_edition_info = '(creating the new file {})'.format(fileinfo)
             pycode_vfileset = vmstate.blankfile_template
@@ -79,10 +87,10 @@ def game_enter(vmstate):
         scr_size[0], scr_size[1] - offset_y, line_numbers_flag=True
     )
     sharedstuff_obj.file_label = None  # editor_blob.currentfont.render(f'opened file= {fileinfo}', False, (0, 250, 0))
-    editor_blob.set_text_from_list(pycode_vfileset ['main.py'])
+    editor_blob.set_text_from_list(pycode_vfileset['main.py'])
     sharedstuff_obj.screen = kengi.get_surface()
     editor_blob.currentfont = pygame.font.Font(None, 24)
-    editor_view = TextEditorAsciiV(editor_blob, MFPS, shared=sharedstuff_obj) if not legacy_view\
+    editor_view = TextEditorAsciiV(editor_blob, MFPS, shared=sharedstuff_obj) if not legacy_view \
         else TextEditorView(editor_blob, MFPS, shared=sharedstuff_obj)
     editor_view.turn_on()
     if not dummy_file:

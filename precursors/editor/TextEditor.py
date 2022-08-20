@@ -22,7 +22,193 @@ class Pyperclip:  # simulation
         return cls.strv
 
 
+class Sharedstuff:
+    def __init__(self):
+        self.disp_save_ico = None  # contains info 'bout time when it needs display
+        self.dump_content = None
+        self.kartridge_output = None
+        self.screen = None
+        self.file_label = None  # for showing what is being edited
+
+
+class FakeProjectLayout:
+    """
+    can use several files, by default its only main.py
+    """
+    def __init__(self, mashup_code):
+        # lets distinguish virtual .py files
+        self.files_to_content = dict()
+        self.file_order = None
+        self._disting_files(mashup_code)
+
+    @property
+    def size(self):
+        return len(self.file_order)
+
+    def _disting_files(self, rawcode):
+        all_lines = rawcode.splitlines()
+        #  on généralise pour qu'on puisse gérer plusieurs fichiers et pas que 2,
+        #  et que l'on puisse choisir son nom xxx.py au lieu d'avoir choisi thing.py en dur!
+        groups = re.findall(r"# >>>(\b[a-z]+\b\.py)", rawcode)
+
+        # find starts
+        starts = dict()
+        order = list()
+        if len(groups):
+            for vfilename in groups:
+                for k, li in enumerate(all_lines):
+                    teststr = f"# >>>{vfilename}"
+                    if li == teststr:
+                        starts[vfilename] = k+1
+                        order.append(vfilename)
+
+        # find stops
+        stops = dict()
+        order.insert(0, 'main.py')
+        if len(order):
+            kk = 1
+            while kk < len(order):
+                nxt = order[kk]
+                stops[order[kk-1]] = starts[nxt]-2
+                kk += 1
+            stops[order[kk - 1]] = len(all_lines)-1
+        else:
+            order.append('main.py')
+            stops['main.py'] = len(all_lines)-1
+        starts['main.py'] = 0
+        print('starts:\n', starts)
+        print('stops:\n', stops)
+
+        for e in order:
+            self.files_to_content[e] = all_lines[starts[e]:stops[e]+1]
+        order.remove('main.py')
+        order.sort()
+        self.file_order = ['main.py'] + order
+
+    def __getitem__(self, item):  # item should be main.py for example
+        return self.files_to_content[item]
+
+
+# ----------------------
+#  start TextEditor cls
+# ----------------------
 class TextEditor:
+    """
+    A priori cette classe est un modèle, mais ça reste assez sale,
+    faudrait nettoyer et retirer tt ce qui concerne la vue/controle
+    """
+
+    def __init__(self, fileslayout, offset_x, offset_y, text_area_width, text_area_height, line_numbers_flag=False):
+        # kengi+sdk flavored font obj
+        # TODO passer en param letter size Y
+        # self.currentfont = kengi.gui.ImgBasedFont('xxxxassets_editor_myassetsgibson1_font.xxx', (87, 77, 11))
+        # self.letter_size_Y = self.currentfont.get_linesize()
+        self.letter_size_Y = 12
+
+        # VISUALS
+        self.txt_antialiasing = 0
+        self.editor_offset_X = offset_x
+        self.editor_offset_Y = offset_y
+        self.textAreaWidth = text_area_width
+        self.textAreaHeight = text_area_height
+        self.conclusionBarHeight = 18
+
+        # TODO passer en param lteter size X
+        # letter_width = self.currentfont.render(" ", self.txt_antialiasing, (0, 0, 0)).get_width()
+        # self.letter_size_X = letter_width
+        self.letter_size_X = 12
+
+        # LINES
+        self.MaxLinecounter = 0
+        self.line_string_list = []  # LOGIC: Array of actual Strings
+        self.lineHeight = self.letter_size_Y
+
+        # self.maxLines is the variable keeping count how many lines we currently have -
+        # in the beginning we fill the entire editor with empty lines.
+        self.maxLines = 20  # int(math.floor(self.textAreaHeight / self.lineHeight))
+        self.showStartLine = 0  # first line (shown at the top of the editor) <- must be zero during init!
+
+        linespacing = 2
+        self.line_gap = self.letter_size_Y + linespacing
+        # how many lines to show
+        self.showable_line_numbers_in_editor = int(math.floor(self.textAreaHeight / self.line_gap)) - 1
+
+        for i in range(self.maxLines):  # from 0 to maxLines:
+            self.line_string_list.append("")  # Add a line
+
+        # SCROLLBAR
+        self.scrollBarWidth = 8  # must be an even number
+        self.scrollbar: pygame.Rect = None
+        self.scroll_start_y: int = 0
+        self.scroll_dragging: bool = False
+
+        # LINE NUMBERS
+        self.displayLineNumbers = line_numbers_flag
+        if self.displayLineNumbers:
+            self.lineNumberWidth = 35  # line number background width and also offset for text!
+        else:
+            self.lineNumberWidth = 0
+        self.line_numbers_Y = self.editor_offset_Y
+
+        # TEXT COORDINATES
+        self.chosen_LineIndex = 0
+        self.chosen_LetterIndex = 0
+        self.yline_start = self.editor_offset_Y + 1  # +1 is here so we can align line numbers & txtcontent surfaces
+
+        # self.yline = self.editor_offset_Y
+        self.xline_start_offset = 28
+
+        # CURSOR - coordinates for displaying the caret while typing
+        self.cursor_Y = self.cursor_X = None
+        self.xline = self.xline_start = None
+        self.reset_cursor()
+
+        # relates to dragging operation
+        self.drag_chosen_LineIndex_start = 0
+        self.drag_chosen_LetterIndex_start = 0
+        # coordinates used to identify end-point of drag
+        self.drag_chosen_LineIndex_end = 0
+        self.drag_chosen_LetterIndex_end = 0
+
+        self.lexer = None  # PythonLexer()
+        self.formatter = None  # ColorFormatter()
+        # there's only dark scheme
+        # self.set_colorscheme(style)
+
+        # Key input variables+
+        self.key_initial_delay = 300
+        self.key_continued_intervall = 30
+        pygame.key.set_repeat(self.key_initial_delay, self.key_continued_intervall)
+
+        # flag to tell that line number need to be re-drawn
+        self.rerenderLineNumbers = True
+
+        # - update data
+        # status info= whats displayed on the very last line editor
+        self.status_info_msg = ''
+
+        self.emu_paperclip = ''
+        self.fake_layout = fileslayout  # stores an object, instance of FakeProjectLayout
+        self.curr_vfile_idx = -1
+        self.switch_file()  # so we target 'main.py'
+
+    # -------------- activates when pressed ctrl+d in the TextEditorV -------------
+    def switch_file(self):
+        self.curr_vfile_idx = (self.curr_vfile_idx + 1) % self.fake_layout.size
+        vfilename = self.fake_layout.file_order[self.curr_vfile_idx]
+        self.set_text_from_list(self.fake_layout[vfilename])
+        self.status_info_msg = f"Editing {vfilename}"
+
+    def reset_cursor(self):
+        if self.displayLineNumbers:
+            self.xline_start = self.editor_offset_X + self.xline_start_offset
+            self.xline = self.editor_offset_X + self.xline_start_offset
+        else:
+            self.xline_start = self.editor_offset_X
+            self.xline = self.editor_offset_X
+        self.cursor_Y = self.editor_offset_Y
+        self.cursor_X = self.xline_start
+
     # ++++++++++ Scroll functionality
     def scrollbar_up(self) -> None:
         self.showStartLine -= 1
@@ -297,91 +483,6 @@ class TextEditor:
     def get_card_lines(self):
         return len(self.line_string_list)
 
-    def __init__(self, offset_x, offset_y, text_area_width, text_area_height, line_numbers_flag=False):
-
-        # kengi+sdk flavored font obj
-        self.currentfont = kengi.gui.ImgBasedFont('editor/myassets/gibson1_font.png', (87, 77, 11))
-        self.letter_size_Y = self.currentfont.get_linesize()
-
-        # VISUALS
-        self.txt_antialiasing = 0
-        self.editor_offset_X = offset_x
-        self.editor_offset_Y = offset_y
-        self.textAreaWidth = text_area_width
-        self.textAreaHeight = text_area_height
-        self.conclusionBarHeight = 18
-        letter_width = self.currentfont.render(" ", self.txt_antialiasing, (0, 0, 0)).get_width()
-        self.letter_size_X = letter_width
-
-        # LINES
-        self.MaxLinecounter = 0
-        self.line_string_list = []  # LOGIC: Array of actual Strings
-        self.lineHeight = self.letter_size_Y
-
-        # self.maxLines is the variable keeping count how many lines we currently have -
-        # in the beginning we fill the entire editor with empty lines.
-        self.maxLines = 20  #int(math.floor(self.textAreaHeight / self.lineHeight))
-        self.showStartLine = 0  # first line (shown at the top of the editor) <- must be zero during init!
-
-        linespacing = 2
-        self.line_gap = self.letter_size_Y + linespacing
-        self.showable_line_numbers_in_editor = int(math.floor(self.textAreaHeight / self.line_gap))
-
-        for i in range(self.maxLines):  # from 0 to maxLines:
-            self.line_string_list.append("")  # Add a line
-
-        # SCROLLBAR
-        self.scrollBarWidth = 8  # must be an even number
-        self.scrollbar: pygame.Rect = None
-        self.scroll_start_y: int = 0
-        self.scroll_dragging: bool = False
-
-        # LINE NUMBERS
-        self.displayLineNumbers = line_numbers_flag
-        if self.displayLineNumbers:
-            self.lineNumberWidth = 35  # line number background width and also offset for text!
-        else:
-            self.lineNumberWidth = 0
-        self.line_numbers_Y = self.editor_offset_Y
-
-        # TEXT COORDINATES
-        self.chosen_LineIndex = 0
-        self.chosen_LetterIndex = 0
-        self.yline_start = self.editor_offset_Y + 1  # +1 is here so we can align line numbers & txtcontent surfaces
-
-        self.yline = self.editor_offset_Y
-        self.xline_start_offset = 28
-        if self.displayLineNumbers:
-            self.xline_start = self.editor_offset_X + self.xline_start_offset
-            self.xline = self.editor_offset_X + self.xline_start_offset
-        else:
-            self.xline_start = self.editor_offset_X
-            self.xline = self.editor_offset_X
-
-        # CURSOR - coordinates for displaying the caret while typing
-        self.cursor_Y = self.editor_offset_Y
-        self.cursor_X = self.xline_start
-
-        # relates to dragging operation
-        self.drag_chosen_LineIndex_start = 0
-        self.drag_chosen_LetterIndex_start = 0
-        # coordinates used to identify end-point of drag
-        self.drag_chosen_LineIndex_end = 0
-        self.drag_chosen_LetterIndex_end = 0
-
-        self.lexer = None  # PythonLexer()
-        self.formatter = None  # ColorFormatter()
-        # there's only dark scheme
-        # self.set_colorscheme(style)
-
-        # Key input variables+
-        self.key_initial_delay = 300
-        self.key_continued_intervall = 30
-        pygame.key.set_repeat(self.key_initial_delay, self.key_continued_intervall)
-
-        # flag to tell that line number need to be re-drawn
-        self.rerenderLineNumbers = True
-
     def highlight_lines(self, line_start, letter_start, line_end, letter_end) -> None:
         """
         Highlights multiple lines based on indizies of starting & ending lines and letters.
@@ -543,17 +644,18 @@ class TextEditor:
         Sets the text of the editor based on a string. Linebreak characters are parsed.
         """
         self.clear_text()
-        self.line_string_list = string.split('\n')
+        self.line_string_list = string.splitlines()
         self.maxLines = len(self.line_string_list)
         self.rerenderLineNumbers = True
 
     def insert_unicode(self, unicode) -> None:
-        self.line_string_list[self.chosen_LineIndex] = self.line_string_list[self.chosen_LineIndex][
-                                                       :self.chosen_LetterIndex] + unicode + \
-                                                       self.line_string_list[self.chosen_LineIndex][
-                                                       self.chosen_LetterIndex:]
-        self.cursor_X += self.letter_size_X
+        nl = self.line_string_list[self.chosen_LineIndex][:self.chosen_LetterIndex]
+        nl += unicode
+        nl += self.line_string_list[self.chosen_LineIndex][self.chosen_LetterIndex:]
+        self.line_string_list[self.chosen_LineIndex] = nl
+
         self.chosen_LetterIndex += 1
+        self.cursor_X += self.letter_size_X
 
     def handle_keyboard_backspace(self) -> None:
         if self.chosen_LetterIndex == 0 and self.chosen_LineIndex == 0:
@@ -832,7 +934,7 @@ class TextEditor:
             self.handle_input_with_highlight(delete_event)
 
         # PASTE from clipboard
-        paste_string = Pyperclip.paste()
+        paste_string = self.emu_paperclip
         line_split = paste_string.split("\r\n")  # split into lines
         if len(line_split) == 1:  # no linebreaks
             self.line_string_list[self.chosen_LineIndex] = \
@@ -866,7 +968,7 @@ class TextEditor:
         Copy highlighted String into clipboard if anything is highlighted, else no action.
         """
         copy_string = self.get_highlighted_characters()
-        Pyperclip.copy(copy_string)
+        self.emu_paperclip = str(copy_string)
 
     def handle_highlight_and_cut(self):
         """
@@ -875,7 +977,7 @@ class TextEditor:
         """
         # Copy functionality
         copy_string = self.get_highlighted_characters()  # copy characters
-        Pyperclip.copy(copy_string)
+        self.emu_paperclip = str(copy_string)
 
         # Cut / delete functionality
         delete_event = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_DELETE)  # create artifical event
@@ -930,5 +1032,23 @@ class TextEditor:
         else:
             return ""
 # ----------------------------------------------
-#   end of editor
+#   end of TextEditor cls
 # ----------------------------------------------
+
+
+"""
+Warning: this is the precursor so it needs to stay in one single file,
+if you need to tinker with stuff, the recommanded procedure is:
+ - First re-use/update other files,
+ - then test and fine tune
+ - then update the current file
+"""
+import math
+import re
+import katagames_sdk as katasdk
+
+ticker = None
+editor_text_content = ''
+glclock = pygame.time.Clock()
+formatedtxt_obj = None
+sharedstuff = Sharedstuff()

@@ -1,7 +1,7 @@
 import katagames_sdk as katasdk
-import sharedstuff
+# import sharedstuff
 
-
+sharedstuff = None
 kengi = katasdk.kengi
 pygame = kengi.pygame
 EngineEvTypes = kengi.event.EngineEvTypes
@@ -16,7 +16,10 @@ SAVE_ICO_LIFEDUR = 2
 #   to have a view that inherits from kengi.event.EventReceiver
 # ----------------------------------------------
 class TextEditorView(kengi.event.EventReceiver):
-    def __init__(self, editorblob_obj, maxfps):
+    def __init__(self, editorblob_obj, maxfps, shared=None):
+        global sharedstuff
+        if shared:
+            sharedstuff = shared
         super().__init__()
         self._blob = editorblob_obj  # blob bc its not 100% refactored, yet
         self._maxfps = maxfps
@@ -27,12 +30,12 @@ class TextEditorView(kengi.event.EventReceiver):
         self.click_hold = False
         self.cycleCounter = 0  # Used to be able to tell whether a mouse-drag action has been handled already or not.
 
-        self.icosurf = pygame.image.load('editor/myassets/saveicon.png')
+        self.icosurf = pygame.image.load('myassets/saveicon.png')
         saveicon_size = self.icosurf.get_size()
         scr_size = sharedstuff.screen.get_size()
         self.icosurf_pos = ((scr_size[0]-saveicon_size[0])//2, (scr_size[1]-saveicon_size[1])//2)
 
-        self.carret_img = pygame.image.load('editor/myassets/Trennzeichen.png').convert_alpha()
+        self.carret_img = pygame.image.load('myassets/Trennzeichen.png').convert_alpha()
 
         # click down - coordinates used to identify start-point of drag
         self.dragged_active = False
@@ -124,7 +127,7 @@ class TextEditorView(kengi.event.EventReceiver):
 
         elif ev.type in (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION):
             mouse_pressed = pygame.mouse.get_pressed()
-            mouse_x, mouse_y = kengi.core.proj_to_vscreen(pygame.mouse.get_pos())
+            mouse_x, mouse_y = kengi.vscreen.proj_to_vscreen(pygame.mouse.get_pos())
             # debugging
             if ev.type == pygame.MOUSEBUTTONDOWN:
                 print('click')
@@ -146,7 +149,8 @@ class TextEditorView(kengi.event.EventReceiver):
         self.render_caret(scr_ref)
 
         self.display_scrollbar(scr_ref)
-        scr_ref.blit(sharedstuff.file_label, (0, 0))
+        if sharedstuff.file_label:
+            scr_ref.blit(sharedstuff.file_label, (0, 0))
 
         if self.latest_t is not None:
             if sharedstuff.disp_save_ico:

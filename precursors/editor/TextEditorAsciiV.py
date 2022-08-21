@@ -9,20 +9,26 @@ sharedstuff = None
 # - constants
 SHOW_ICON_DURAT = 2  # sec
 
-# here so we can implement a crude syntax coloring (use a different color for these words)
+# we implement a crude syntax coloring (lets use another color for all these words)
 PY_KEYWORDS = (
-    # types
-    'bool', 'list', 'tuple', 'str', 'int', 'float',
-    # flow control
-    'if', 'else', 'elif', 'for', 'while',
-    # built-in functions
-    'len', 'not', 'in', 'enumerate', 'range'
-    # literals
-                                     'None', 'True', 'False',
-    # misc
-    'def', 'return', 'class', 'self'
+    # keywords
+    'if', 'else', 'elif', 'for', 'while', 'not', 'in', 'None', 'True', 'False', 'def', 'return', 'class',
+
+    # built-in stuff
+    'bool', 'list', 'tuple', 'str', 'int', 'float', 'len', 'enumerate', 'range', 'max', 'min', 'super',
+
+    # vspecial
+    '__init__', 'self'
 )
 
+DEEP_GRAY_BGCOLOR = (43, 43, 43)  # same gray used by PyCharm
+
+# CHOSEN SYNTAX COLORING (white + 5 other colors)
+# a- keywords like def, if, else, None, import, class... darkorange (201, 117, 49)
+# b- built-in types and functions like print, list, str, etc. ALSO literals like 878 or 11.3 blue-ish gray (136,136,198)
+# c- strings surrounded by '' or ""... green sapin (73, 138, 88) BUT ALSO triple quote/multi-line comments
+# d- comments: well, it's just a light gray (95, 95, 105)
+# e- very special keywords like __init__, self: a gentle purple (119, 50, 125)
 
 ascii_canvas = kengi.ascii
 
@@ -33,8 +39,14 @@ class TextEditorAsciiV(kengi.event.EventReceiver):
         if shared:
             sharedstuff = shared
         super().__init__()
-        self.locked_file = False
 
+        # Key input variables+
+        self.key_initial_delay = 300
+        self.key_continued_intervall = 30
+        # CAREFUL this doesnt work in web ctx /!\
+        pygame.key.set_repeat(self.key_initial_delay, self.key_continued_intervall)
+
+        self.locked_file = False
         self._mod = ref_mod
         self._maxfps = maxfps
         self.latest_t = None  # pr disposer pt de repere, combien de temps afficher save icon

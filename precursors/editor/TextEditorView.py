@@ -21,6 +21,12 @@ class TextEditorView(kengi.event.EventReceiver):
         if shared:
             sharedstuff = shared
         super().__init__()
+
+        # Key input variables+
+        self.key_initial_delay = 300
+        self.key_continued_intervall = 30
+        pygame.key.set_repeat(self.key_initial_delay, self.key_continued_intervall)
+
         self.scrollBarWidth = 8  # const
 
         self._blob = editorblob_obj  # blob bc its not 100% refactored, yet

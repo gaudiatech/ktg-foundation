@@ -175,11 +175,6 @@ class TextEditor:
         # there's only dark scheme
         # self.set_colorscheme(style)
 
-        # Key input variables+
-        self.key_initial_delay = 300
-        self.key_continued_intervall = 30
-        pygame.key.set_repeat(self.key_initial_delay, self.key_continued_intervall)
-
         # flag to tell that line number need to be re-drawn
         self.rerenderLineNumbers = True
 
@@ -768,7 +763,8 @@ class TextEditor:
                 self.cursor_Y -= self.line_gap
                 self.rerenderLineNumbers = True
 
-    def handle_keyboard_arrow_down(self) -> None:
+    def handle_keyboard_arrow_down(self):
+        print('handle keydown in TextEditor')
         if self.chosen_LineIndex < (self.maxLines - 1):
             # Not in the last line, downward movement possible
             self.chosen_LineIndex += 1

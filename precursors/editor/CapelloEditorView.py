@@ -1,5 +1,5 @@
 import katagames_sdk as katasdk
-
+import re
 
 # CHOSEN SYNTAX COLORING (white + 5 other colors)
 # a- keywords like def, if, else, None, import, class... darkorange (201, 117, 49)
@@ -22,7 +22,7 @@ PY_SYNTAX = {
     ('BUILT-IN', 2): (  # py built-in stuff
         'bool', 'list', 'tuple', 'str', 'int', 'float', 'len', 'enumerate', 'range', 'max', 'min', 'super',
     ),
-    ('VSPECIAL', 3): (  # vspecial words
+    ('VSPECIAL', 5): (  # vspecial words
         '__init__', 'self'
     )
 }
@@ -73,16 +73,26 @@ class CapelloEditorView(Receiver):
             reco_smth = None
             while (reco_smth is None) or reco_smth:
                 reco_smth = False
+                # - detect strings enclosed by "
+                result = re.search(r'(".*")', rawline)
+                if result:
+                    found = result.groups()[0]
+                    x = rawline.index(found)
+                    y = len(found)
+                    reco_smth = True
+                    rawline = rawline[x+y:]
+                    str_col = 3
+                    curr_li.append({'chars': found, 'color': str_col, 'style': 'normal'})
+
+                # - attempt to detect keywords
                 for syntaxcat, known_words in PY_SYNTAX.items():
                     for w in known_words:
-                        find_rez = rawline.find(w+' ')
+                        find_rez = rawline.find(w)
                         if find_rez >= 0:  # update rawline (remove recognized w) & append w to curr_li
                             reco_smth = True
-                            if find_rez == 0:
-                                rawline = rawline[find_rez+len(w):]
-                                curr_li.append({'chars': w, 'color': syntaxcat[1], 'style': 'normal'})
-                            else:
-                                curr_li.append({'chars': w, 'color': syntaxcat[1], 'style': 'normal'})
+                            rawline = rawline[find_rez+len(w):]
+                            curr_li.append({'chars': w, 'color': syntaxcat[1], 'style': 'normal'})
+
             # append the rest
             curr_li.append({'chars': rawline, 'color': 0, 'style': 'normal'})
             rendering_list.append(curr_li)

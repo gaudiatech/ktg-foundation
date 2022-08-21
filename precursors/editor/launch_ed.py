@@ -8,7 +8,7 @@ from ScProviderFactory import ScProviderFactory
 
 # i try to make the model lightweight... {
 # ++ use the lean version
-from model import TextEditor, sharedstuff_obj
+from model import EditorModel, sharedstuff_obj
 
 # ++ use legacy model
 # from TextEditor import TextEditor
@@ -82,7 +82,7 @@ def game_enter(vmstate):
 
     scr_size = paint_ev.screen.get_size()
     # {M}
-    editor_blob = TextEditor(
+    editor_blob = EditorModel(
         pycode_vfileset,
         offset_x, offset_y,  # offset_y is 0
         scr_size[0], scr_size[1] - offset_y, line_numbers_flag=True
@@ -102,7 +102,7 @@ def game_enter(vmstate):
     editor_view.turn_on()
 
     # {C}
-    ectrl = EditorCtrl(editor_blob)
+    ectrl = EditorCtrl(editor_blob, sharedstuff_obj)
     ectrl.turn_on()
 
     if not dummy_file:

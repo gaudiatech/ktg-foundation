@@ -16,7 +16,7 @@ class Sharedstuff:
         self.file_label = None  # for showing what is being edited
 
 
-class TextEditor:
+class EditorModel:
 
     def __init__(self, py_code, offset_x, offset_y,  dimx, dimy, line_numbers_flag=False):
         """
@@ -47,13 +47,18 @@ class TextEditor:
         # this line is here so the text is not overriding column dedicated to  line number display...
         self.xline_start_offset = 25
 
+        # size of letters
+        self.letter_size_Y = 12
+
         # not sure if the following block is super useful, ive added it only to support 4 arrows operations
         self.showable_line_numbers_in_editor = 15  # -->maybe can have a default val, then we set real val via the view
         self.lineHeight = 20  # -------->view
         self.letter_size_X = 8  # -------->view
         self.lineNumberWidth = 24  # --------->view
         self.txt_antialiasing = False  #-->view
-        self.line_gap = self.lineHeight + 3
+
+        linespacing = 2
+        self.line_gap = self.letter_size_Y + linespacing
 
         self.yline_start = offset_y  # cest pas dupe val?
 
@@ -129,6 +134,37 @@ class TextEditor:
         self.chosen_LineIndex = 0
         self.chosen_LetterIndex = 0
         self.update_caret_position()
+
+    def handle_keyboard_tab(self):
+        for x in range(0, 4):  # insert 4 spaces
+            self.handle_keyboard_space()
+
+    def handle_keyboard_space(self):
+        # insert 1 space
+        self.line_string_list[self.chosen_LineIndex] = \
+            self.line_string_list[self.chosen_LineIndex][:self.chosen_LetterIndex] + " " + \
+            self.line_string_list[self.chosen_LineIndex][self.chosen_LetterIndex:]
+        self.cursor_X += self.letter_size_X
+        self.chosen_LetterIndex += 1
+
+    def handle_keyboard_delete(self) -> None:
+        if self.chosen_LetterIndex < (len(self.line_string_list[self.chosen_LineIndex])):
+            # start of the line or mid-line (Cursor stays on point), cut one letter out
+            a = self.line_string_list[self.chosen_LineIndex][:self.chosen_LetterIndex]
+            b = self.line_string_list[self.chosen_LineIndex][(self.chosen_LetterIndex + 1):]
+            self.line_string_list[self.chosen_LineIndex] = a + b
+
+        elif self.chosen_LetterIndex == len(self.line_string_list[self.chosen_LineIndex]):
+            # End of a line  (choose next line)
+            if self.chosen_LineIndex != (
+                    self.maxLines - 1):  # NOT in the last line &(prev) at the end of the line, I cannot delete anything
+                self.line_string_list[self.chosen_LineIndex] += self.line_string_list[
+                    self.chosen_LineIndex + 1]  # add the contents of the next line to the current one
+
+                self.remove_subsequent_lines()
+        else:
+            raise ValueError(" INVALID CONSTRUCT: handle_keyboard_delete. \
+                             \nLine:" + str(self.chosen_LineIndex) + "\nLetter: " + str(self.chosen_LetterIndex))
 
     def handle_keyboard_return(self):
         # Get "transfer letters" behind cursor up to the end of the line to next line

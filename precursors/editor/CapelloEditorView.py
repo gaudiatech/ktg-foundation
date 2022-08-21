@@ -30,6 +30,7 @@ PY_SYNTAX = {
 
 # - aliases
 kengi = katasdk.kengi
+pygame = kengi.pygame
 Receiver = kengi.event.EventReceiver
 EngineEvTypes = kengi.event.EngineEvTypes
 
@@ -49,10 +50,66 @@ class CapelloEditorView(Receiver):
             kengi.gfx.ProtoFont('spec-assets/capello-ft-e'),
         ]
 
+        # so we can disp a caret
+        self.caret_img = pygame.image.load('myassets/Trennzeichen.png')
+
     # --------------
     #  métier, methodes privées
     # --------------
-    def _get_color_dicts(self):  # -> List[List[Dict]]
+
+    def _get_dicts_syntax_coloring(self):
+        res = list()
+        # new algo (august 22), detect py keywords and use colours
+        for rawline in self._mod.line_string_list:
+            curr_li = list()
+            reco_smth = None
+            while (reco_smth is None) or reco_smth:
+                reco_smth = False
+
+                # - detect commentary, lines that start with
+                result = re.search(r'#.*$', rawline)
+                if result:
+                    x, bsup = result.span()
+                    found = result.group()
+                    if x > 0:
+                        curr_li.append({'chars':  rawline[:x], 'color': 0, 'style': 'normal'})
+                    reco_smth = True
+                    rawline = rawline[bsup:]
+                    str_col = 4
+                    curr_li.append({'chars': found, 'color': str_col, 'style': 'normal'})
+                    continue
+
+                # - attempt to detect keywords
+                for syntaxcat, known_words in PY_SYNTAX.items():
+                    for w in known_words:
+                        find_rez = re.search(r'\b' + w + r'\b', rawline)
+                        if find_rez:  # update rawline (remove recognized w) & append w to curr_li
+                            reco_smth = True
+                            x, bsup = find_rez.span()
+                            if x > 0:
+                                curr_li.append({'chars': rawline[:x], 'color': 0, 'style': 'normal'})
+                            rawline = rawline[bsup:]
+                            curr_li.append({'chars': w, 'color': syntaxcat[1], 'style': 'normal'})
+
+                # - detect strings enclosed by "
+                result = re.search(r'(["\'].*["\'])', rawline)
+                if result:
+                    found = result.groups()[0]
+                    x = rawline.index(found)
+                    if x > 0:
+                        curr_li.append({'chars': rawline[:x], 'color': 0, 'style': 'normal'})
+                    bsup = x + len(found)
+                    reco_smth = True
+                    rawline = rawline[bsup:]
+                    str_col = 3
+                    curr_li.append({'chars': found, 'color': str_col, 'style': 'normal'})
+
+            # append the rest of the line, regular color
+            curr_li.append({'chars': rawline, 'color': 0, 'style': 'normal'})
+            res.append(curr_li)
+        return res
+
+    def _get_dicts(self):  # -> List[List[Dict]]
         """
         THIS METHOD = display without color syntaxing!
 
@@ -60,52 +117,18 @@ class CapelloEditorView(Receiver):
         Every line is one sublist.
         Since only one color is being applied, we create a list with one dict per line.
         """
-        rendering_list = list()
-        if not self.syntax_coloring:
+        if self.syntax_coloring:
+            return self._get_dicts_syntax_coloring()
+        else:  # simple case
+            rendering_list = list()
             for rawline in self._mod.line_string_list:
                 # a single-item list when a single color is used
                 rendering_list.append([{'chars': rawline, 'color': 0, 'style': 'normal'}])
             return rendering_list
 
-        # new algo (august 22), detect py keywords and use colours
-        for rawline in self._mod.line_string_list:
-            curr_li = list()
-            reco_smth = None
-            while (reco_smth is None) or reco_smth:
-                reco_smth = False
-                # - detect strings enclosed by "
-                result = re.search(r'(".*")', rawline)
-                if result:
-                    found = result.groups()[0]
-                    x = rawline.index(found)
-                    y = len(found)
-                    reco_smth = True
-                    rawline = rawline[x+y:]
-                    str_col = 3
-                    curr_li.append({'chars': found, 'color': str_col, 'style': 'normal'})
-
-                # - attempt to detect keywords
-                for syntaxcat, known_words in PY_SYNTAX.items():
-                    for w in known_words:
-                        find_rez = rawline.find(w)
-                        if find_rez >= 0:  # update rawline (remove recognized w) & append w to curr_li
-                            reco_smth = True
-                            rawline = rawline[find_rez+len(w):]
-                            curr_li.append({'chars': w, 'color': syntaxcat[1], 'style': 'normal'})
-
-            # append the rest
-            curr_li.append({'chars': rawline, 'color': 0, 'style': 'normal'})
-            rendering_list.append(curr_li)
-        return rendering_list
-
     def _render_line_contents(self, li_dicts, rscreen):
-        # - naive algo
-        # for k, line_todraw in enumerate(li_dicts):
-        #     cidx = line_todraw[0]['color']
-        #     pfont = self.cfonts[cidx]
-        #     pfont.text_to_surf(line_todraw[0]['chars'], rscreen, (8, 8 + 10 * k), spacing=1)
-
         moo = self._mod
+        chosen_sp = 1  # spacing between letters
 
         # Preparation of the rendering:
         self.yline = self._mod.yline_start
@@ -122,15 +145,12 @@ class CapelloEditorView(Receiver):
             for a_dict in line_list:
                 cidx = a_dict['color']
                 pfont = self.cfonts[cidx]
-
-                #surface = self._blob.currentfont.render(a_dict['chars'], self._blob.txt_antialiasing, a_dict['color'])  # create surface
-                #rscreen.blit(surface, (xcoord, self.yline))  # blit surface onto screen
-                pfont.text_to_surf(a_dict['chars'], rscreen, (xcoord, self.yline), spacing=1)
-                xcoord = xcoord + (len(a_dict['chars']) * moo.letter_size_X)  # next line-part prep
+                pfont.text_to_surf(a_dict['chars'], rscreen, (xcoord, self.yline), spacing=chosen_sp)
+                xcoord = xcoord + pfont.compute_width(a_dict['chars'], spacing=chosen_sp)
             self.yline += moo.line_gap  # next line prep
 
     def _render_caret(self, rscreen):
-        pass  # TODO
+        rscreen.blit(self.caret_img, (self._mod.cursor_X, self._mod.cursor_Y))
 
     # ---------------------
     #  main method for this cls
@@ -141,7 +161,7 @@ class CapelloEditorView(Receiver):
 
         scr_ref = ev.screen
         scr_ref.fill(DEEP_GRAY_BGCOLOR)
-        list_of_dicts = self._get_color_dicts()  # find what to draw + syntax coloring if needed
+        list_of_dicts = self._get_dicts()  # find what to draw + syntax coloring if needed
         # format returned by GET_COLOR_DICTS: List[List[Dict]]
         # if there's only one color for the whole line, the model of the line will look like this:
         # [{'chars': the_whole_line_str_obj, 'type': 'normal', 'color': self.textColor}]

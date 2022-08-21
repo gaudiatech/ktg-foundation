@@ -1,8 +1,8 @@
 import time
 import katagames_sdk as katasdk
-
 katasdk.bootstrap()
 
+from CapelloEditorView import CapelloEditorView
 from ctrl import EditorCtrl
 from ScProviderFactory import ScProviderFactory
 
@@ -28,13 +28,12 @@ pygame = kengi.pygame
 ascii_canvas = kengi.ascii
 lu_event = paint_ev = e_manager = None
 EngineEvTypes = kengi.event.EngineEvTypes
-legacy_view = False
 
 
 def game_enter(vmstate):
     global lu_event, paint_ev, e_manager
-    kengi.init()
-    ascii_canvas.init(1)  # pass the level of upscaling
+    kengi.init(2)
+    # ascii_canvas.init(1)  # pass the level of upscaling
     lu_event = kengi.event.CgmEvent(EngineEvTypes.LOGICUPDATE, curr_t=None)
     paint_ev = kengi.event.CgmEvent(EngineEvTypes.PAINT, screen=None)
     paint_ev.screen = kengi.get_surface()
@@ -94,8 +93,12 @@ def game_enter(vmstate):
     editor_blob.currentfont = pygame.font.Font(None, 24)
 
     # {V}
-    editor_view = TextEditorAsciiV(editor_blob, MFPS, shared=sharedstuff_obj) if not legacy_view \
-        else TextEditorView(editor_blob, MFPS, shared=sharedstuff_obj)
+    # *******LEGACY
+    # editor_view = TextEditorView(editor_blob, MFPS, shared=sharedstuff_obj)
+    # *******ASCII-based
+    # editor_view = TextEditorAsciiV(editor_blob, MFPS, shared=sharedstuff_obj)
+    # *******CAPELLO(the modern way)
+    editor_view = CapelloEditorView(editor_blob)
     editor_view.turn_on()
 
     # {C}

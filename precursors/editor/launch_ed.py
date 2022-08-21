@@ -1,7 +1,9 @@
 import time
 import katagames_sdk as katasdk
+
 katasdk.bootstrap()
 
+from ctrl import EditorCtrl
 from ScProviderFactory import ScProviderFactory
 
 # i try to make the model lightweight... {
@@ -11,7 +13,6 @@ from model import TextEditor, sharedstuff_obj
 # ++ use legacy model
 # from TextEditor import TextEditor
 # from TextEditor import sharedstuff as sharedstuff_obj
-
 # end of attempts}
 
 from VirtualFilesetBuffer import VirtualFilesetBuffer
@@ -81,6 +82,7 @@ def game_enter(vmstate):
     #    tt = ft.render('bidule: ' + vmstate.cedit_arg, False, (0, 250, 0))
 
     scr_size = paint_ev.screen.get_size()
+    # {M}
     editor_blob = TextEditor(
         pycode_vfileset,
         offset_x, offset_y,  # offset_y is 0
@@ -90,9 +92,16 @@ def game_enter(vmstate):
     editor_blob.set_text_from_list(pycode_vfileset['main.py'])
     sharedstuff_obj.screen = kengi.get_surface()
     editor_blob.currentfont = pygame.font.Font(None, 24)
+
+    # {V}
     editor_view = TextEditorAsciiV(editor_blob, MFPS, shared=sharedstuff_obj) if not legacy_view \
         else TextEditorView(editor_blob, MFPS, shared=sharedstuff_obj)
     editor_view.turn_on()
+
+    # {C}
+    ectrl = EditorCtrl(editor_blob)
+    ectrl.turn_on()
+
     if not dummy_file:
         if existing_file:
             if vmstate.has_ro_flag(fileinfo):

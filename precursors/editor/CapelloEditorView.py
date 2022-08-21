@@ -14,13 +14,13 @@ import re
 DEEP_GRAY_BGCOLOR = (43, 43, 43)  # same gray used by PyCharm
 
 PY_SYNTAX = {
+    ('BUILT-IN', 2): (  # py built-in stuff
+        'super', 'bool', 'list', 'tuple', 'str', 'int', 'float', 'len', 'enumerate', 'range', 'max', 'min', 'print',
+    ),
     ('KEYWORDS', 1): (  # py keywords
         'if', 'else', 'elif', 'for', 'while',
         'not', 'in', 'None', 'True', 'False',
         'def', 'return', 'class', 'as',
-    ),
-    ('BUILT-IN', 2): (  # py built-in stuff
-        'bool', 'list', 'tuple', 'str', 'int', 'float', 'len', 'enumerate', 'range', 'max', 'min', 'super',
     ),
     ('VSPECIAL', 5): (  # vspecial words
         '__init__', 'self'
@@ -39,6 +39,13 @@ class CapelloEditorView(Receiver):
     def __init__(self, ref_mod):
         super().__init__()
         self._mod = ref_mod
+
+        # TODO find another way to express the following behavior
+        # /!\ its very likely that this wont work in web ctx... start pb {
+        key_initial_delay = 350
+        key_continued_intervall = 50
+        pygame.key.set_repeat(key_initial_delay, key_continued_intervall)
+        # } end pb
 
         self.syntax_coloring = True
         self.cfonts = [

@@ -40,6 +40,9 @@ class EditorCtrl(Receiver):
         if ctrl_key_pressed and event.key == pygame.K_a:
             self._blob.highlight_all()
 
+        elif ctrl_key_pressed and event.key == pygame.K_n:
+            self._mod.switch_file()  # edit next vfile
+
         elif ctrl_key_pressed and event.key == pygame.K_z:
             # TODO implement undo operation
             print('undo not implemented yet!')

@@ -8,9 +8,11 @@ if you need to tinker with stuff, the recommanded procedure is:
 import math
 import re
 import katagames_sdk as katasdk
-
-
 katasdk.bootstrap()
+
+from TextEditorView import TextEditorView
+
+
 FOLDER_CART = 'cartridges'
 
 
@@ -137,7 +139,7 @@ class TextEditorAsciiV(kengi.event.EventReceiver):
         self._mod.line_gap = char_sz
         self._mod.xline_start_offset = self.codestart_ij_pos[0] * char_sz
         self._mod.editor_offset_X = 0
-        self._mod.showable_line_numbers_in_editor = self.codespace_nbrows
+        self._mod.max_nb_lines_shown = self.codespace_nbrows
         self._mod.reset_cursor()
 
         # for faster display, let's pre-compute some stuff
@@ -384,9 +386,9 @@ class TextEditor:
     def __init__(self, fileslayout, offset_x, offset_y, text_area_width, text_area_height, line_numbers_flag=False):
         # kengi+sdk flavored font obj
         # TODO passer en param letter size Y
-        # self.currentfont = kengi.gui.ImgBasedFont('xxxxassets_editor_myassetsgibson1_font.xxx', (87, 77, 11))
-        # self.letter_size_Y = self.currentfont.get_linesize()
-        self.letter_size_Y = 12
+        self.currentfont = kengi.gui.ImgBasedFont('myassets/gibson1_font.png', (87, 77, 11))
+        self.letter_size_Y = self.currentfont.get_linesize()
+        #self.letter_size_Y = 12
 
         # VISUALS
         self.txt_antialiasing = 0
@@ -1384,11 +1386,18 @@ class FakeProjectLayout:
 # - functions for the web -
 def game_enter(vmstate):
     global ticker, lu_event, paint_ev, e_manager
+
+    # case: old imgbased font view
+    # katasdk.set_mode(2)
+
+    # case: ascii view
     katasdk.set_mode(1)
     ascii_canvas.init(1)  # pass the level of upscaling
+
     lu_event = kengi.event.CgmEvent(EngineEvTypes.LOGICUPDATE, curr_t=None)
     paint_ev = kengi.event.CgmEvent(EngineEvTypes.PAINT, screen=None)
-    paint_ev.screen = kengi.get_surface()
+    paint_ev.screen = sharedstuff.screen = kengi.get_surface()
+
     e_manager = kengi.event.EventManager.instance()
 
     offset_x = 0  # offset from the left border of the pygame window
@@ -1444,7 +1453,11 @@ def game_enter(vmstate):
     sharedstuff.file_label = None  # editor_blob.currentfont.render(f'opened file= {fileinfo}', False, (0, 250, 0))
     editor_blob.set_text_from_list(py_code['main.py'])
 
+    # (1) legacy editor view
+    # editor_view = TextEditorView(editor_blob, MFPS, sharedstuff)
+    # (2) ascii
     editor_view = TextEditorAsciiV(editor_blob, MFPS)
+
     editor_view.turn_on()
 
     if not dummy_file:
@@ -1485,12 +1498,12 @@ def game_exit(vmstate):
 # --------------------------------------------
 if __name__ == '__main__':
     import time
-
-    game_enter(katasdk.vmstate)
+    vms = katasdk.get_vmstate()
+    game_enter(vms)
     gameover = False
     while not gameover:
         uresult = game_update(time.time())
         if uresult is not None:
             if 0 < uresult[0] < 3:
                 gameover = True
-    game_exit(katasdk.vmstate)
+    game_exit(vms)

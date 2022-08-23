@@ -16,10 +16,9 @@ SAVE_ICO_LIFEDUR = 2
 #   to have a view that inherits from kengi.event.EventReceiver
 # ----------------------------------------------
 class TextEditorView(kengi.event.EventReceiver):
-    def __init__(self, editorblob_obj, maxfps, shared=None):
+    def __init__(self, editorblob_obj, maxfps, pass_shared):
         global sharedstuff
-        if shared:
-            sharedstuff = shared
+        sharedstuff = pass_shared
         super().__init__()
 
         # Key input variables+

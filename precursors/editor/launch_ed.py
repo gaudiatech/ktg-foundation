@@ -1,39 +1,24 @@
-import time
 import katagames_sdk as katasdk
 katasdk.bootstrap()
-
-from CapelloEditorView import CapelloEditorView
+import time
+from model import ScProviderFactory, VirtualFilesetBuffer, sharedstuff_obj, EditorModel
+from view import CapelloEditorView
 from ctrl import EditorCtrl
-from ScProviderFactory import ScProviderFactory
+from shared import DIR_CARTRIDGES
 
-# i try to make the model lightweight... {
-# ++ use the lean version
-from model import EditorModel, sharedstuff_obj
-
-# ++ use legacy model
-# from TextEditor import TextEditor
-# from TextEditor import sharedstuff as sharedstuff_obj
-# end of attempts}
-
-from VirtualFilesetBuffer import VirtualFilesetBuffer
-
-
-# rest of import instructions...
-from TextEditorAsciiV import TextEditorAsciiV
-from TextEditorView import TextEditorView
-from sharedstuff import MFPS
 
 kengi = katasdk.kengi
-pygame = kengi.pygame
-ascii_canvas = kengi.ascii
-lu_event = paint_ev = e_manager = None
 EngineEvTypes = kengi.event.EngineEvTypes
+pygame = kengi.pygame
+gameover = False
 
 
+# ----------------------------------------
+#  BODY
+@katasdk.tag_gameenter
 def game_enter(vmstate):
     global lu_event, paint_ev, e_manager
     kengi.init(2)
-    # ascii_canvas.init(1)  # pass the level of upscaling
     lu_event = kengi.event.CgmEvent(EngineEvTypes.LOGICUPDATE, curr_t=None)
     paint_ev = kengi.event.CgmEvent(EngineEvTypes.PAINT, screen=None)
     paint_ev.screen = kengi.get_surface()
@@ -57,28 +42,16 @@ def game_enter(vmstate):
         # - fetch code for editing
         if vmstate.has_game(fileinfo):
             existing_file = True
+
             curr_edition_info = '(editing an existing file {})'.format(fileinfo)
             # AJOUT mercredi 20/04/22 ca peut que marcher en local cela!
-            with open(f'{FOLDER_CART}/{fileinfo}.py', 'r') as ff:
+            with open(f'{DIR_CARTRIDGES}/{fileinfo}.py', 'r') as ff:
                 pycode_vfileset = VirtualFilesetBuffer(ff.read())
+
         else:  # game creation
             curr_edition_info = '(creating the new file {})'.format(fileinfo)
-            pycode_vfileset = vmstate.blankfile_template
+            pycode_vfileset = VirtualFilesetBuffer(vmstate.blankfile_template)
         print(curr_edition_info)
-
-    # --- another way to do it ---
-    # ajout dimanche 10.04
-    # f = open(PATH_SRC_FILE, 'r')
-    # editor_text_content = f.read()
-    # f.close()
-    # formatedtxt_obj = SFText(screen, editor_text_content,
-    # run precursor alone
-    #    font_path='editor0/fonts/')
-    # xxx -> 'editor/**assets/gibson0_font.xxx'
-    # if vmstate:
-    #    print('***** editing file ******* {}'.format(vmstate.cedit_arg))
-    #    ft = kengi.gui.ImgBasedFont(xxx, (0, 0, 250))
-    #    tt = ft.render('bidule: ' + vmstate.cedit_arg, False, (0, 250, 0))
 
     scr_size = paint_ev.screen.get_size()
     # {M}
@@ -87,17 +60,13 @@ def game_enter(vmstate):
         offset_x, offset_y,  # offset_y is 0
         scr_size[0], scr_size[1] - offset_y, line_numbers_flag=True
     )
-    sharedstuff_obj.file_label = None  # editor_blob.currentfont.render(f'opened file= {fileinfo}', False, (0, 250, 0))
+    sharedstuff_obj.file_label = None
+    # editor_blob.currentfont.render(f'opened file= {fileinfo}', False, (0, 250, 0))
     editor_blob.set_text_from_list(pycode_vfileset['main.py'])
     sharedstuff_obj.screen = kengi.get_surface()
     editor_blob.currentfont = pygame.font.Font(None, 24)
 
     # {V}
-    # *******LEGACY
-    # editor_view = TextEditorView(editor_blob, MFPS, shared=sharedstuff_obj)
-    # *******ASCII-based
-    # editor_view = TextEditorAsciiV(editor_blob, MFPS, shared=sharedstuff_obj)
-    # *******CAPELLO(the modern way)
     editor_view = CapelloEditorView(editor_blob)
     editor_view.turn_on()
 
@@ -111,6 +80,7 @@ def game_enter(vmstate):
                 editor_view.locked_file = True
 
 
+@katasdk.tag_gameupdate
 def game_update(t_info=None):
     global lu_event, paint_ev, gameover, e_manager
     lu_event.curr_t = t_info
@@ -123,6 +93,7 @@ def game_update(t_info=None):
         return sharedstuff_obj.kartridge_output
 
 
+@katasdk.tag_gameexit
 def game_exit(vmstate):
     if vmstate:
         if vmstate.cedit_arg is not None and sharedstuff_obj.dump_content is not None:
@@ -134,15 +105,13 @@ def game_exit(vmstate):
     kengi.quit()
 
 
-# -------------------
-# entry pt, local ctx
-# -------------------
 if __name__ == '__main__':
-    game_enter(katasdk.vmstate)
-    gameover = False
+    # you can uncomment this only if you run the editor via the VM (not stand-alone)
+    # vms = katasdk.get_vmstate()
+    game_enter(None)
     while not gameover:
         uresult = game_update(time.time())
         if uresult is not None:
             if 0 < uresult[0] < 3:
                 gameover = True
-    game_exit(katasdk.vmstate)
+    game_exit(None)

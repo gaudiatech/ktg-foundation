@@ -1,12 +1,13 @@
-import pygame
-
 import katagames_sdk as katasdk
 
 kengi = katasdk.kengi
+pygame = kengi.pygame
 Receiver = kengi.event.EventReceiver
 EngineEvTypes = kengi.event.EngineEvTypes
 
 
+# ----------------------------------------
+#  CTRL
 class EditorCtrl(Receiver):
     def __init__(self, ref_mod, shared):
         super().__init__()
@@ -51,19 +52,22 @@ class EditorCtrl(Receiver):
         elif ctrl_key_pressed and event.key == pygame.K_v:
             self.handle_highlight_and_paste()
 
-        elif ctrl_key_pressed and event.key == pygame.K_s:
-            print('**SAVE detected**')
-            sharedstuff.disp_save_ico = tinfo + SAVE_ICO_LIFEDUR
-            sharedstuff.dump_content = self._blob.get_text_as_string()
-
-        # Functionality for when something is highlighted (cut / copy)
-        elif self.dragged_finished and self.dragged_active:
-            if (pressed_keys[pygame.K_LCTRL] or pressed_keys[pygame.K_RCTRL]) and event.key == pygame.K_x:
-                self.handle_highlight_and_cut()
-            elif (pressed_keys[pygame.K_LCTRL] or pressed_keys[pygame.K_RCTRL]) and event.key == pygame.K_c:
-                self.handle_highlight_and_copy()
-            else:
-                self.handle_input_with_highlight(event)  # handle char input on highlight
+        # ---------------
+        #  temporarily disabled features : save stuff, copy/past
+        # ---------------
+        # elif ctrl_key_pressed and event.key == pygame.K_s:
+        #     print('**SAVE detected**')
+        #     sharedstuff.disp_save_ico = tinfo + SAVE_ICO_LIFEDUR
+        #     sharedstuff.dump_content = self._blob.get_text_as_string()
+        #
+        # # Functionality for when something is highlighted (cut / copy)
+        # elif self.dragged_finished and self.dragged_active:
+        #     if (pressed_keys[pygame.K_LCTRL] or pressed_keys[pygame.K_RCTRL]) and event.key == pygame.K_x:
+        #         self.handle_highlight_and_cut()
+        #     elif (pressed_keys[pygame.K_LCTRL] or pressed_keys[pygame.K_RCTRL]) and event.key == pygame.K_c:
+        #         self.handle_highlight_and_copy()
+        #     else:
+        #         self.handle_input_with_highlight(event)
 
         # ___ SINGLE KEY INPUTS ___
         else:
@@ -103,20 +107,33 @@ class EditorCtrl(Receiver):
 
             # ___ SPECIAL KEYS ___
             elif event.key == pygame.K_TAB:  # TABULATOR
-                self._blob.handle_keyboard_tab()
+                for _ in range(4):  # four spaces
+                    self._mod.handle_keyboard_space()
 
             elif event.key == pygame.K_SPACE:  # SPACEBAR
                 self._mod.handle_keyboard_space()
+
             elif event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:  # RETURN
                 self._mod.handle_keyboard_return()
-            elif event.key == pygame.K_UP:  # ARROW_UP
+
+            # ------------------------------
+            #  arrow keys
+            # ------------------------------
+            elif event.key == pygame.K_UP:
                 self._mod.handle_keyboard_arrow_up()
-            elif event.key == pygame.K_DOWN:  # ARROW_DOWN
+                self._mod.handle_arrow_key(1)
+
+            elif event.key == pygame.K_DOWN:
                 self._mod.handle_keyboard_arrow_down()
-            elif event.key == pygame.K_RIGHT:  # ARROW_RIGHT
+                self._mod.handle_arrow_key(3)
+
+            elif event.key == pygame.K_RIGHT:
                 self._mod.handle_keyboard_arrow_right()
-            elif event.key == pygame.K_LEFT:  # ARROW_LEFT
+                self._mod.handle_arrow_key(0)
+
+            elif event.key == pygame.K_LEFT:
                 self._mod.handle_keyboard_arrow_left()
+                self._mod.handle_arrow_key(2)
 
             else:
                 tmp_arr = [

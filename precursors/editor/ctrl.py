@@ -119,22 +119,21 @@ class EditorCtrl(Receiver):
             # ------------------------------
             #  arrow keys
             # ------------------------------
-            elif event.key == pygame.K_UP:
-                self._mod.handle_keyboard_arrow_up()
-                self._mod.handle_arrow_key(1)
-
-            elif event.key == pygame.K_DOWN:
-                self._mod.handle_keyboard_arrow_down()
-                self._mod.handle_arrow_key(3)
-
-            elif event.key == pygame.K_RIGHT:
-                self._mod.handle_keyboard_arrow_right()
-                self._mod.handle_arrow_key(0)
-
-            elif event.key == pygame.K_LEFT:
-                self._mod.handle_keyboard_arrow_left()
-                self._mod.handle_arrow_key(2)
-
+            elif event.key in (pygame.K_RIGHT, pygame.K_UP, pygame.K_LEFT, pygame.K_DOWN):
+                # self._mod.handle_arrow_key({
+                #     pygame.K_RIGHT: 0,
+                #     pygame.K_UP: 1,
+                #     pygame.K_LEFT: 2,
+                #     pygame.K_DOWN: 3
+                # }[event.key])
+                if event.key == pygame.K_RIGHT:
+                    self._mod.handle_keyboard_arrow_right()
+                elif event.key == pygame.K_UP:
+                    self._mod.handle_keyboard_arrow_up()
+                elif event.key == pygame.K_LEFT:
+                    self._mod.handle_keyboard_arrow_left()
+                elif event.key == pygame.K_DOWN:
+                    self._mod.handle_keyboard_arrow_down()
             else:
                 tmp_arr = [
                     pygame.K_RSHIFT, pygame.K_LSHIFT, pygame.K_DELETE,

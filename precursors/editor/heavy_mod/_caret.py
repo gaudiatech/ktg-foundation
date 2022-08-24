@@ -129,4 +129,5 @@ def update_caret_position(self) -> None:
     # version tom
     self.cursor_Y = self.editor_offset_Y
     self.cursor_Y += self.line_spacing + (self.chosen_LineIndex-self.showStartLine) * self.line_gap
-    print(f'[{chunk}], cursor: {self.cursor_X},{self.cursor_Y}')
+    # - DEBUG
+    # print(f'[{chunk}], cursor: {self.cursor_X},{self.cursor_Y}')

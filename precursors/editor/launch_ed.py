@@ -1,14 +1,13 @@
+import time
+
 import katagames_sdk as katasdk
 katasdk.bootstrap()
-import time
-from model import ScProviderFactory, VirtualFilesetBuffer, sharedstuff_obj
-# modele lightweight qui déconne!
-# from model import EditorModel
-from heavy_mod.EditorModel import EditorModel
-from view import CapelloEditorView
+
 from ctrl import EditorCtrl
+from heavy_mod.EditorModel import EditorModel
 from heavy_mod.shared import DIR_CARTRIDGES
-# from ModernView import ModernView
+from model_addon import ScProviderFactory, VirtualFilesetBuffer, sharedstuff_obj
+from view import CapelloEditorView
 
 
 kengi = katasdk.kengi

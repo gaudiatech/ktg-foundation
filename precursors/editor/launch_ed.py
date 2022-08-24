@@ -1,10 +1,14 @@
 import katagames_sdk as katasdk
 katasdk.bootstrap()
 import time
-from model import ScProviderFactory, VirtualFilesetBuffer, sharedstuff_obj, EditorModel
+from model import ScProviderFactory, VirtualFilesetBuffer, sharedstuff_obj
+# modele lightweight qui déconne!
+# from model import EditorModel
+from heavy_mod.EditorModel import EditorModel
 from view import CapelloEditorView
 from ctrl import EditorCtrl
-from shared import DIR_CARTRIDGES
+from heavy_mod.shared import DIR_CARTRIDGES
+# from ModernView import ModernView
 
 
 kengi = katasdk.kengi
@@ -23,8 +27,7 @@ def game_enter(vmstate):
     paint_ev = kengi.event.CgmEvent(EngineEvTypes.PAINT, screen=None)
     paint_ev.screen = kengi.get_surface()
     e_manager = kengi.event.EventManager.instance()
-    offset_x = 0  # offset from the left border of the pygame window
-    offset_y = 0  # offset from the top border of the pygame window
+
     existing_file = False
     # set text content for the editor
     if vmstate is None:
@@ -55,11 +58,23 @@ def game_enter(vmstate):
 
     scr_size = paint_ev.screen.get_size()
     # {M}
+    # le lightweights model
+    # editor_blob = EditorModel(
+    #     pycode_vfileset,
+    #     offset_x, offset_y,  # offset_y is 0
+    #     scr_size[0], scr_size[1] - offset_y, line_numbers_flag=True
+    # )
+    # --- modele issu de editor4
+    offset_x = 32  # offset from the left border of the pygame window
+    offset_y = 100  # offset from the top border of the pygame window
+
     editor_blob = EditorModel(
-        pycode_vfileset,
-        offset_x, offset_y,  # offset_y is 0
-        scr_size[0], scr_size[1] - offset_y, line_numbers_flag=True
+        offset_x, offset_y, scr_size[0]-55, 3+scr_size[1]//2, kengi.get_surface(), line_numbers_flag=True
     )
+    editor_view = CapelloEditorView(editor_blob)
+    editor_view.set_bg_color(pygame.color.Color('midnightblue'))
+    editor_view.set_syntax_highlighting(True)
+
     sharedstuff_obj.file_label = None
     # editor_blob.currentfont.render(f'opened file= {fileinfo}', False, (0, 250, 0))
     editor_blob.set_text_from_list(pycode_vfileset['main.py'])
@@ -67,7 +82,7 @@ def game_enter(vmstate):
     editor_blob.currentfont = pygame.font.Font(None, 24)
 
     # {V}
-    editor_view = CapelloEditorView(editor_blob)
+    # editor_view = ModernView(editor_blob, maxfps=45)
     editor_view.turn_on()
 
     # {C}

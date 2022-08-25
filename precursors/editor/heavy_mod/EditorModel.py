@@ -116,11 +116,11 @@ class EditorModel(kengi.event.CogObj):
         self.textAreaWidth = text_area_width
         self.textAreaHeight = text_area_height
 
-        self.conclusionBarHeight = 18
         self.letter_size_Y = 11
 
-        # old
-        # self.courier_font = pygame.font.SysFont('courier', self.letter_size_Y)
+        # disable if youre using the newest ver of the view
+        self.courier_font = pygame.font.SysFont('courier', self.letter_size_Y)
+        self.letter_size_X = 10
 
         self.proto_font = None  # init from outside (right after the view obj is created)
         self.known_spacing = None  # init from outside too
@@ -143,7 +143,9 @@ class EditorModel(kengi.event.CogObj):
 
         # self.maxLines is the variable keeping count how many lines we currently have -
         # in the beginning we fill the entire editor with empty lines.
-        self.maxLines = int(math.floor(self.textAreaHeight / self.lineHeight))
+        # self.maxLines = int(math.floor(self.textAreaHeight / self.lineHeight))
+        # print('maxlines ', self.maxLines)
+
         self.showStartLine = 0  # first line (shown at the top of the editor) <- must be zero during init!
         self.line_spacing = 3
         self.line_gap = self.letter_size_Y + self.line_spacing
@@ -151,8 +153,12 @@ class EditorModel(kengi.event.CogObj):
             math.floor(self.textAreaHeight / self.line_gap)
         )
 
-        for i in range(self.maxLines):  # from 0 to maxLines:
-            self.line_string_list.append("")  # Add a line
+        # for i in range(self.maxLines):  # from 0 to maxLines:
+        # INIT editor content
+        self.line_string_list.append("")  # Add one blank line
+
+        self.conclusionBarHeight = self.textAreaHeight - self.showable_line_numbers_in_editor * self.line_gap
+        print('conclusion bar: ', self.conclusionBarHeight)
 
         # SCROLLBAR
         self.scrollbar: pygame.Rect = None

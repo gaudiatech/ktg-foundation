@@ -35,6 +35,8 @@ class CapelloEditorView(Receiver):
     def __init__(self, ref_mod):
         super().__init__()
 
+        self.color_scrollbar = pygame.color.Color('grey34')
+
         # TODO find another way to express the following behavior
         # /!\ its very likely that this wont work in web ctx... start pb {
         key_initial_delay = 350
@@ -194,14 +196,107 @@ class CapelloEditorView(Receiver):
 
         # deprec cannot work with heavy_mod
         #rscreen.blit(self.caret_img, self.cursor_xy)
+        binf_y = self._mod.editor_offset_Y
+        if binf_y < self._mod.cursor_Y < binf_y + self._mod.textAreaHeight:
+            rscreen.blit(self.caret_img, (self._mod.cursor_X, self._mod.cursor_Y))
 
-        rscreen.blit(self.caret_img, (self._mod.cursor_X, self._mod.cursor_Y))
+    # -----------------------------
+    #  scrollbars
+    # -----------------------------
+    def render_scrollbar_vertical(self, scr) -> None:
+        self.display_scrollbar(scr)
+
+    def display_scrollbar(self, scr):
+        if len(self._mod.line_string_list) <= self._mod.showable_line_numbers_in_editor:
+            self._mod.scrollbar = None
+            return  # if scrollbar is not needed, don't show.
+
+        # scroll bar is a fraction of the space
+        w = self._mod.scrollBarWidth
+        x = (
+                self._mod.editor_offset_X + self._mod.textAreaWidth - self._mod.scrollBarWidth - 2
+        )  # -2 for space between edge & scrollbar
+        y = int(
+            self._mod.editor_offset_Y
+            + (w / 2)
+            + (self._mod.textAreaHeight * ((self._mod.showStartLine * 1.0) / self._mod.maxLines))
+        )
+        h = int(
+            (self._mod.textAreaHeight - w)
+            * ((self._mod.showable_line_numbers_in_editor * 1.0) / self._mod.maxLines)
+        )
+        h -= 2  # minor adjustment so we don't draw any single pixel outside of the editor boundaries
+        self._mod.scrollbar = pygame.Rect(x, y, w, h)
+
+        pygame.draw.circle(
+            scr, self.color_scrollbar, (int(x + (w / 2)), y), int(w / 2)
+        )  # top round corner
+        pygame.draw.rect(
+            scr, self.color_scrollbar, self._mod.scrollbar
+        )  # actual scrollbar
+        pygame.draw.circle(
+            scr, self.color_scrollbar, (int(x + (w / 2)), y + h), int(w / 2)
+        )  # bottom round corner
+
+    # - old, deprecated version. No logical caret update triggered back then
+    def _left_click_handle0(self, mousx, mousy):
+        # in order not to have the mouse move around after a click,
+        # we need to disable this function until we RELEASE it.
+
+        # /!\ was de-activated, i dunno if its mandatory to use this
+        # self.last_clickdown_cycle = self.cycleCounter
+
+        self._mod.click_hold = True
+        self._mod.dragged_active = True
+        self._mod.dragged_finished = False
+
+        if self._mod.mouse_within_texteditor(mousx, mousy):  # editor area
+            if self._mod.mouse_within_existing_lines(mousy):  # in area of existing lines
+                self._mod.set_drag_start_by_mouse(mousx, mousy)
+            else:  # clicked below the existing lines
+                self._mod.set_drag_start_after_last_line()
+
+            self._mod.update_caret_position_by_drag_start()
+            # tom add-on:
+            # we need this otherwise the carret moves but the next unicode inputed comes at the wrong location!
+            # self._mod.set_drag_start_by_mouse(mousx, mousy)
+        else:
+            pass  # mouse outside of editor => ignored this
+
+    def _left_click_handle(self, mousx, mousy):  # find adhoc pos for logical caret...
+        j = (mousy - self._mod.editor_offset_Y) // self._mod.line_gap
+        j += self._mod.showStartLine
+        adhoc_txt_line = self._mod.line_string_list[j]
+        ft = self.cfonts[0]
+        print('ligne trouvee:', adhoc_txt_line)
+        i = None
+        decalx = self._mod.editor_offset_X
+        # TODO fix this computation in case we dont disp line numbers!
+        tmarge = self._mod.lineNumberWidth  # marge ds laquelle on a écrit les numéro de ligne
+        print(tmarge)
+        for adhoc_idx in range(len(adhoc_txt_line), -1, -1):
+            if mousx > ft.compute_width(adhoc_txt_line[:adhoc_idx], spacing=self.chosen_sp) + tmarge + decalx - 3:
+                i = adhoc_idx
+                break
+        # impact the model
+        self._mod.chosen_LetterIndex, self._mod.chosen_LineIndex = (i, j)
+        self._mod.update_caret_position()
 
     # ---------------------
     #  most important method for this cls
     def proc_event(self, ev, source=None):
         if ev.type == EngineEvTypes.PAINT:
             self._do_paint(ev.screen)
+
+        elif ev.type == pygame.MOUSEBUTTONDOWN:
+            mx, my = kengi.vscreen.proj_to_vscreen(ev.pos)
+            if self._mod.mouse_within_texteditor(mx, my):
+                if ev.button == 1:
+                    self._left_click_handle(mx, my)
+                elif ev.button == 4 and self._mod.showStartLine > 0:
+                    self._mod.scrollbar_up()
+                elif ev.button == 5 and self._mod.showStartLine + self._mod.showable_line_numbers_in_editor < self._mod.maxLines:
+                    self._mod.scrollbar_down()
 
         elif ev.type == EditorEvTypes.RedrawNeeded:
             self.rerenderLineNumbers = True
@@ -232,9 +327,10 @@ class CapelloEditorView(Receiver):
             # dirty, jit def
             # self.lineNumberBackgroundColor = (44, 33, 33)
             defaultcol = self.DEFAULT_DEEP_GRAY_BGCOLOR
-            self.lineNumberBackgroundColor = defaultcol if (self._bg_color is None) else self._bg_color
+            # self.lineNumberBackgroundColor = defaultcol if (self._bg_color is None) else self._bg_color
+            self.lineNumberBackgroundColor = pygame.color.Color('grey12')
             self.lineNumberColor = (80, 77, 188)
-            self.pygfont = pygame.font.SysFont('courier', 12)
+            # self.pygfont = pygame.font.SysFont('courier', 12)
 
             line_numbers_y = self._mod.editor_offset_Y  # init for first line
             binf, bsup = self._mod.showStartLine, self._mod.showStartLine+self._mod.showable_line_numbers_in_editor
@@ -251,12 +347,18 @@ class CapelloEditorView(Receiver):
                 # line number
                 if x < self._mod.get_showable_lines():
                     # x + 1 in order to start with line 1 (only display, logical it's the 0th item in the list
-                    text = self.pygfont.render(
-                        str(x + 1).zfill(2), self._mod.aa_option, self.lineNumberColor
-                    )
-                    text_rect = text.get_rect()
-                    text_rect.center = pygame.Rect(r).center
-                    scr_ref.blit(text, text_rect)  # render on center of bg block
+                    nstr = str(x + 1).zfill(3)
+
+                    # -old
+                    #text = self.pygfont.render(
+                    #    nstr, self._mod.aa_option, self.lineNumberColor
+                    #)
+                    #text_rect = text.get_rect()
+                    #text_rect.center = pygame.Rect(r).center
+
+                    self.cfonts[3].text_to_surf(nstr, scr_ref, (-4+r[0]+r[2]-self.cfonts[0].compute_width(nstr, spacing=0), r[1]+self._mod.line_spacing), spacing=0)
+                    # -old
+                    # scr_ref.blit(text, text_rect)  # render on center of bg block
                 line_numbers_y += self._mod.line_gap
 
         # ++ lines of text ++
@@ -268,3 +370,5 @@ class CapelloEditorView(Receiver):
         # if many colors, therefore many elements in the inner list...
         self._render_line_contents(list_of_dicts, scr_ref)
         self._render_caret(scr_ref)
+
+        self.render_scrollbar_vertical(scr_ref)

@@ -80,6 +80,10 @@ def update_caret_position_by_drag_start(self) -> None:
     """
     # Updates cursor_X and cursor_Y positions based on the start position of a dragging operation.
     """
+    #TODO
+    # possible refactor: lets update the logical stuff right away? instead of doing it afterwars in
+    # update_caret_position_by_drag_start
+
     # X Position
     self.cursor_X = self.xline_start + (
         self.drag_chosen_LetterIndex_start * self.letter_size_X
@@ -112,22 +116,27 @@ def update_caret_position(self) -> None:
     """
     # Updates cursor_X and cursor_Y positions based on current position by line and letter indices
     """
-    # old:
-    # self.cursor_X = self.xline_start + (self.chosen_LetterIndex * self.letter_size_X)
-    chunk = self.line_string_list[self.chosen_LineIndex][:self.chosen_LetterIndex]
+    if self.proto_font:
+        # -- new >>>>>>>>>>>>>>
+        chunk = self.line_string_list[self.chosen_LineIndex][:self.chosen_LetterIndex]
 
-    x_mini_offset = -2
-    self.cursor_X = self.xline_start + self.proto_font.compute_width(chunk, spacing=self.known_spacing) + x_mini_offset
+        x_mini_offset = -2
+        self.cursor_X = self.xline_start + self.proto_font.compute_width(chunk,        spacing=self.known_spacing) + x_mini_offset
+        # version tom
+        self.cursor_Y = self.editor_offset_Y
+        self.cursor_Y += self.line_spacing + (self.chosen_LineIndex - self.showStartLine) * self.line_gap
 
-    # old:
-    # self.cursor_Y = (
-    #     self.editor_offset_Y
-    #     + (self.chosen_LineIndex * self.line_gap)
-    #     - (self.showStartLine * self.lineHeight)
-    # )
+    else:
+        # -- old >>>>>>>>>>>>> uses monospace
 
-    # version tom
-    self.cursor_Y = self.editor_offset_Y
-    self.cursor_Y += self.line_spacing + (self.chosen_LineIndex-self.showStartLine) * self.line_gap
+        self.cursor_X = self.xline_start + (self.chosen_LetterIndex * self.letter_size_X)
+
+        self.cursor_Y = (
+            self.editor_offset_Y
+            + (self.chosen_LineIndex * self.line_gap)
+            - (self.showStartLine * self.lineHeight)
+        )
+
+
     # - DEBUG
     # print(f'[{chunk}], cursor: {self.cursor_X},{self.cursor_Y}')

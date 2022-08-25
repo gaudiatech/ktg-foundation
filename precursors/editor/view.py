@@ -35,6 +35,12 @@ class CapelloEditorView(Receiver):
     def __init__(self, ref_mod):
         super().__init__()
 
+        # used solely for the scrolling via mouse feature
+        self.scroll_start_y = 0
+        self.scroll_dragging = False
+        # avoid scroll too fast
+        self.cycleCounter = 0
+
         self.color_scrollbar = pygame.color.Color('grey34')
 
         # TODO find another way to express the following behavior
@@ -264,16 +270,23 @@ class CapelloEditorView(Receiver):
             pass  # mouse outside of editor => ignored this
 
     def _left_click_handle(self, mousx, mousy):  # find adhoc pos for logical caret...
+        if self._mod.scrollbar is not None:
+            if self._mod.scrollbar.collidepoint(mousx, mousy):
+                self.scroll_start_y = mousy
+                self.scroll_dragging = True
+                print('dragging starts')
+                return
+
         j = (mousy - self._mod.editor_offset_Y) // self._mod.line_gap
         j += self._mod.showStartLine
         adhoc_txt_line = self._mod.line_string_list[j]
         ft = self.cfonts[0]
-        print('ligne trouvee:', adhoc_txt_line)
+
         i = None
         decalx = self._mod.editor_offset_X
         # TODO fix this computation in case we dont disp line numbers!
         tmarge = self._mod.lineNumberWidth  # marge ds laquelle on a écrit les numéro de ligne
-        print(tmarge)
+
         for adhoc_idx in range(len(adhoc_txt_line), -1, -1):
             if mousx > ft.compute_width(adhoc_txt_line[:adhoc_idx], spacing=self.chosen_sp) + tmarge + decalx - 3:
                 i = adhoc_idx
@@ -297,6 +310,24 @@ class CapelloEditorView(Receiver):
                     self._mod.scrollbar_up()
                 elif ev.button == 5 and self._mod.showStartLine + self._mod.showable_line_numbers_in_editor < self._mod.maxLines:
                     self._mod.scrollbar_down()
+
+        elif ev.type == pygame.MOUSEBUTTONUP:
+            if self.scroll_dragging:
+                self.scroll_dragging = False
+                self.cycleCounter = 0
+
+        elif ev.type == pygame.MOUSEMOTION:
+            if self.scroll_dragging:
+                if not (self.cycleCounter % 8):
+                    _, my = kengi.vscreen.proj_to_vscreen(ev.pos)
+                    if my > self.scroll_start_y:
+                        if self._mod.showStartLine+self._mod.showable_line_numbers_in_editor < len(self._mod.line_string_list):
+                            self._mod.scrollbar_down()
+                    elif my < self.scroll_start_y:
+                        if self._mod.showStartLine > 0:
+                            self._mod.scrollbar_up()
+                    self.scroll_start_y = my
+                self.cycleCounter += 1
 
         elif ev.type == EditorEvTypes.RedrawNeeded:
             self.rerenderLineNumbers = True

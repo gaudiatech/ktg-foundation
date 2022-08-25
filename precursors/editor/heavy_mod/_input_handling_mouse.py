@@ -155,8 +155,13 @@ def mouse_within_texteditor(self, mouse_x, mouse_y) -> bool:
     """
     Returns True if the given coordinates are within the text-editor area of the pygame window, otherwise False.
     """
+    # old:
+    # rab = self.scrollBarWidth
+    # new:
+    rab = 0
+    # for the new view version, we consider scrollbar is part of the editor
     return self.editor_offset_X + self.lineNumberWidth < mouse_x < (
-        self.editor_offset_X + self.textAreaWidth - self.scrollBarWidth
+        self.editor_offset_X + self.textAreaWidth - rab
     ) and self.editor_offset_Y < mouse_y < (
         self.textAreaHeight + self.editor_offset_Y - self.conclusionBarHeight
     )

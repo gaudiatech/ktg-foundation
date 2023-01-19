@@ -1,3 +1,20 @@
+"""
+[Rules]
+Ultimate Texas Hold’em is played against the casino, so you’ll be up against the dealer. There can be multiple players
+at the table, but that doesn’t change much at all as your only goal is to beat the dealer. Whether other players win or
+lose is of no significance to you.
+
+#1 > after paying Ante+Blind, the dealer gives you 2 cards. You can either: Check / Bet 3x the ante / Bet 4x the ante
+(If you decide to bet either 3x or 4x after seeing your hand, the dealer will deal the flop, the turn & the river
+without you having any further betting options)
+
+#2 > In case you opt to check, the dealer will deal out the flop. Now you can either: Check / Bet 2x the ante
+(If you bet, the dealer will deal the turn & the river without you having any further betting options)
+
+#3 > In case you opt to check, the dealer will deal the turn & the river. This is the final betting round. This time,
+you can either: Fold / Bet 1x the ante. You cannot check anymore since the river is out.
+"""
+
 import katagames_sdk as katasdk
 katasdk.bootstrap()
 
@@ -10,7 +27,7 @@ PokerHand = kengi.tabletop.PokerHand
 StandardCard = kengi.tabletop.StandardCard
 
 MyEvTypes = kengi.game_events_enum((
-    'CashChanges',  # contains int "value"
+    'MoneyUpdate',  # contains int "value"
     'StageChanges',
     'EndRoundRequested',
     'Victory',  # contains: amount
@@ -54,13 +71,6 @@ PLAYER_CHIPS = {
 
 class MoneyInfo(kengi.Emitter):
     """
-    created a 2nd class (model) so it will be easier to manage
-    earning & loosing
-
-    earning := prize due to "Ante" + prize due to "Bet" + prize due to "Blind"
-    right now this class isnt used, but it should become active
-
-    ------
     * Si le Croupier a la meilleure combinaison, il recupere tt les mises des cases « Blinde »,
     « Mise (Ante) » et « Jouer » (cas particulier pour le Bonus, voir ci-dessous)
 
@@ -71,43 +81,87 @@ class MoneyInfo(kengi.Emitter):
     il récupère l’intégralité de ses mises de départ et ses enjeux seront payés en fct du tableau de paiement...
     Présent dans .compute_blind_multiplier
     """
+    PLAYCOST = 5  # CR
 
-    def __init__(self, init_amount=200):
+    def __init__(self, wealth):
         super().__init__()
-        self._cash = init_amount  # starting cash
-        # TODO complete the implem & use this class!
-        self.ante = self.blind = self.playcost = 0
-        self._latest_bfactor = None
-        self.recorded_outcome = None  # -1 loss, 0 tie, 1 victory
-        self.recorded_prize = 0
+        # before the match
+        self._wealth = wealth
 
-    def get_cash_amount(self):
-        return self._cash
+        # during the match
+        self.trips = 0
+        self.ante = self.blind = 0
+        self.play = 0
 
-    def init_play(self, value):
-        self.ante = self.blind = value
-        self._cash -= 2 * value
-        self.pev(MyEvTypes.CashChanges, value=self._cash)
+        # post-match
+        self.delta_wealth = 0
 
-    def bet(self, bet_factor):
-        self.playcost = bet_factor * self.ante
-        self._cash -= self.playcost
-        self.pev(MyEvTypes.CashChanges, value=self._cash)
-        self._latest_bfactor = bet_factor
+    @property
+    def balance(self):
+        return self._wealth
 
-    def update_money_info(self):
+    def reboot_match(self):
+        self._wealth -= 2 * self.PLAYCOST
+        self.ante = self.blind = self.PLAYCOST
+        self.delta_wealth = -2 * self.PLAYCOST
+        self.pev(MyEvTypes.MoneyUpdate, value=self._wealth)
+
+    def bet_impact(self, factor):
+        """
+        before the flop : 3x or 4x ante
+        after the flop :  2x ante
+        on the river : 1x ante
+
+        :param factor is the multiplier according to UTH rules
+        """
+        assert isinstance(factor, int) and 1 <= factor <= 4
+        self.play = factor * self.ante
+        self._wealth -= self.play
+        self.pev(MyEvTypes.MoneyUpdate, value=self._wealth)
+
+    def loose_impact(self, push_the_ante=False):
+        """
+        only push if the player did not fold & dealer doesnt qualify /!\
+        """
+        if push_the_ante:
+            self._wealth += self.ante
+        self.ante = self.blind = 0
+        self.play = 0
+        self.pev(MyEvTypes.MoneyUpdate, value=self._wealth)
+
+    def update_delta_wealth(self, pl_hand, dealer_hand):
+        """
+        Earning :=
+        prize due to "Ante" + + prize due to "Blind" + prize due to your "play"
+        """
+        victory = True
+        if victory:
+            self.delta_wealth = MoneyInfo.compute_ante_prize() \
+                    + MoneyInfo.compute_blind_multiplier(pl_hand) \
+                    + self.play
+
+        # la banque paye à égalité sur ante & playcost
+        # prize = self.ante + self.playcost
+        # blind_multiplier = MoneyInfo.compute_blind_multiplier(winning_hand)
+        # prize += blind_multiplier * self.blind
+        # self.recorded_prize = prize
+        # self.recorded_outcome = 1
+
+    def win_impact(self):
         if self.recorded_outcome == 1:
             self._cash += self.recorded_prize
         if self.recorded_outcome > -1:
             self._cash += self.ante + self.blind + self.playcost  # recup toutes les mises
 
-        self.ante = self.blind = self.playcost = 0  # reset play
-        self.pev(MyEvTypes.CashChanges, value=self._cash)
+        self.ante = self.blind = self.play = 0  # reset play
+        self.pev(MyEvTypes.MoneyUpdate, value=self._cash)
 
-    @property
     def is_player_broke(self):
+        """
+        useful method because someone may want to call .pev(EngineEvTypes.GAMEENDS) when player's broke
+        :return: True/False
+        """
         return self._cash <= 0
-        # useful method because someone may want to call .pev(EngineEvTypes.GAMEENDS) when player's broke
 
     # ---------------------
     #  the 4 methods below compute future gain/loss
@@ -115,15 +169,15 @@ class MoneyInfo(kengi.Emitter):
     # ---------------------
     @staticmethod
     def compute_blind_multiplier(givenhand):
-        # calcul gain spécifique & relatif à la blinde
-        # -------------------------------------------
-        # Royal flush- 500 pour 1
-        # Straigth flush- 50 pour 1
-        # Four of a kind - 10 pour 1
-        # Full house - 3 pour 1
-        # Flush - 1.5 pour 1
-        # Suite - 1 pour 1
-        # autres mains y a pas eu victore mais simple égalité!
+        """
+        Calcul gain spécifique & relatif à la blinde
+        Royal flush- 500 pour 1
+        Straigth flush- 50 pour 1
+        Four of a kind - 10 pour 1
+        Full house - 3 pour 1
+        Flush - 1.5 pour 1
+        Suite - 1 pour 1
+        """
         multiplicateur = {
             'High Card': 0,
             'One Pair': 0,
@@ -137,21 +191,13 @@ class MoneyInfo(kengi.Emitter):
         }[givenhand.description]
         return multiplicateur
 
-    def announce_victory(self, winning_hand):
-        prize = self.ante + self.playcost  # la banque paye à égalité sur ante & playcost
-        blind_multiplier = MoneyInfo.compute_blind_multiplier(winning_hand)
-        prize += blind_multiplier * self.blind
-        self.recorded_prize = prize
-        self.recorded_outcome = 1
-        self.pev(MyEvTypes.Victory, amount=prize)
-
-    def announce_tie(self):
-        self.recorded_outcome = 0
-        self.pev(MyEvTypes.Tie)
-
-    def announce_defeat(self):
-        self.recorded_outcome = -1
-        self.pev(MyEvTypes.Defeat, loss=-1 * (self.ante + self.blind + self.playcost))
+    def notify_outcome(self):
+        if self.delta_wealth > 0:
+            self.pev(MyEvTypes.Victory, amount=self.delta_wealth)
+        elif self.delta_wealth == 0:
+            self.pev(MyEvTypes.Tie)
+        else:
+            self.pev(MyEvTypes.Defeat, loss=-1 * (self.ante + self.blind + self.playcost))
 
 
 class UthModel(kengi.Emitter):
@@ -178,7 +224,8 @@ class UthModel(kengi.Emitter):
 
     def __init__(self):
         super().__init__()
-        self.wallet = MoneyInfo()
+        self.wallet = MoneyInfo(200)
+
         self.deck = CardDeck()
         self.revealed = {
             'dealer1': False,
@@ -210,14 +257,14 @@ class UthModel(kengi.Emitter):
 
     @property
     def cash(self):
-        return self.wallet.get_cash_amount()
+        return self.wallet.balance
 
     @property
     def money_info(self):
         return [
             (self.wallet.ante, 'ante'),
             (self.wallet.blind, 'blind'),
-            (self.wallet.playcost, 'bet')
+            (self.wallet.play, 'bet')
         ]
 
     def evolve_state(self):  # state transitions
@@ -243,7 +290,7 @@ class UthModel(kengi.Emitter):
         # TODO should be deck.draw_cards(2) or smth
         self.dealer_hand.extend(self.deck.deal(2))
         self.player_hand.extend(self.deck.deal(2))
-        self.wallet.init_play(ante_val)
+        self.wallet.reboot_match()
         self.set_stage(self.DISCOV_ST_CODE)
 
     def go_flop(self):

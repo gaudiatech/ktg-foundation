@@ -1,42 +1,58 @@
 import katagames_sdk as katasdk
+katasdk.bootstrap()
 
-#katasdk.bootstrap()
 
 kengi = katasdk.kengi
-kengi.bootstrap_e()
+find_best_ph = kengi.tabletop.find_best_ph
+Card = kengi.tabletop.StandardCard
+CardDeck = kengi.tabletop.CardDeck
+PokerHand = kengi.tabletop.PokerHand
+StandardCard = kengi.tabletop.StandardCard
 
-pygame = kengi.pygame
-# pr poker
-alea_xx = lambda_hand = epic_hand = list()
-
-MyEvTypes = kengi.event.enum_ev_types(
-    # -----------------------
-    #  related to poker
-    # -----------------------
+MyEvTypes = kengi.game_events_enum((
     'CashChanges',  # contains int "value"
     'StageChanges',
     'EndRoundRequested',
     'Victory',  # contains: amount
     'Tie',
     'Defeat'  # contains: loss
-)
-
-# - more aliases
-EngineEvTypes = kengi.event.EngineEvTypes
-Card = kengi.tabletop.StandardCard
-PokerHand = kengi.tabletop.PokerHand
-StandardCard = kengi.tabletop.StandardCard
-find_best_ph = kengi.tabletop.find_best_ph
-CardDeck = kengi.tabletop.CardDeck
-
+))
 
 WARP_BACK = [2, 'niobepolis']
+BACKGROUND_IMG_PATH = 'user_assets/pokerbackground3.png'
+CARD_SIZE_PX = (69, 101)
+CHIP_SIZE_PX = (40, 40)
+OFFSET_CASH = (-48, -24)
+CARD_SLOTS_POS = {  # coords in pixel -> where to place cards/chips
+    'dealer1': (140, 48),
+    'dealer2': (140 + 40, 48),
+    'player1': (140, 206),
+    'player2': (140 + 40, 206),
+    'flop3': (238 - 40 * 2, 115),
+    'flop2': (238 - 40 * 1, 115),
+    'flop1': (238, 115),
+    'river': (110 - 40, 115),
+    'turn': (110, 115),
+    'ante': (935 / 3, 757 / 3),
+    'bet': (935 / 3, 850 / 3),
+    'blind': (1040 / 3, 757 / 3),
+    'raise1': (955 / 3, 870 / 3),
+    'raise2': (961 / 3, 871 / 3),
+    'raise3': (967 / 3, 872 / 3),
+    'raise4': (973 / 3, 873 / 3),
+    'raise5': (980 / 3, 875 / 3),
+    'raise6': (986 / 3, 876 / 3)
+}
+PLAYER_CHIPS = {
+    '2a': (825 / 2, 1000 / 2),
+    '2b': (905 / 2, 1000 / 2),
+    '5': (985 / 2, 1000 / 2),
+    '10': (1065 / 2, 1000 / 2),
+    '20': (1145 / 2, 1000 / 2)
+}
 
 
-# -----------------------------------------------------------------/
-#              ******** MODEL ********
-# -----------------------------------------------------------------/
-class MoneyInfo(kengi.event.CogObj):
+class MoneyInfo(kengi.Emitter):
     """
     created a 2nd class (model) so it will be easier to manage
     earning & loosing
@@ -45,23 +61,23 @@ class MoneyInfo(kengi.event.CogObj):
     right now this class isnt used, but it should become active
 
     ------
-    * Si le Croupier a la meilleure combinaison, il récupère toutes les mises des cases « Blinde »,
+    * Si le Croupier a la meilleure combinaison, il recupere tt les mises des cases « Blinde »,
     « Mise (Ante) » et « Jouer » (cas particulier pour le Bonus, voir ci-dessous)
 
-    * en cas d’égalité, les mises restent aux joueurs sans gain ni perte (cas particulier pour le Bonus, voir ci-dessous)
+    * en cas d’égalité, les mises restent aux joueurs sans gain ni perte
+    (cas particulier pour le Bonus, voir ci-dessous)
 
     * Si un joueur a une meilleure combinaison que le Croupier,
-    il récupère l’intégralité de ses mises de départ et ses enjeux seront payés en fonction du tableau de paiement :
+    il récupère l’intégralité de ses mises de départ et ses enjeux seront payés en fct du tableau de paiement...
+    Présent dans .compute_blind_multiplier
     """
 
     def __init__(self, init_amount=200):
         super().__init__()
         self._cash = init_amount  # starting cash
-
         # TODO complete the implem & use this class!
         self.ante = self.blind = self.playcost = 0
         self._latest_bfactor = None
-
         self.recorded_outcome = None  # -1 loss, 0 tie, 1 victory
         self.recorded_prize = 0
 
@@ -126,9 +142,7 @@ class MoneyInfo(kengi.event.CogObj):
         blind_multiplier = MoneyInfo.compute_blind_multiplier(winning_hand)
         prize += blind_multiplier * self.blind
         self.recorded_prize = prize
-
         self.recorded_outcome = 1
-
         self.pev(MyEvTypes.Victory, amount=prize)
 
     def announce_tie(self):
@@ -140,14 +154,10 @@ class MoneyInfo(kengi.event.CogObj):
         self.pev(MyEvTypes.Defeat, loss=-1 * (self.ante + self.blind + self.playcost))
 
 
-
-class UthModel(kengi.event.CogObj):
-    INIT_ST_CODE, DISCOV_ST_CODE, FLOP_ST_CODE, TR_ST_CODE, OUTCOME_ST_CODE, WAIT_STATE = range(1, 6 + 1)
-
+class UthModel(kengi.Emitter):
     """
     Uth: Ultimate Texas Holdem
     STAGES ARE
-
     0: "eden state" -> cards not dealt, no money spent
     1: cards dealt yes, both ante and blind have been paid, you pick one option: check/bet 3x/ bet 4x
       if bet 4x you go straight to the last state
@@ -164,11 +174,12 @@ class UthModel(kengi.event.CogObj):
       pay bonus only, current round halts
     """
 
+    INIT_ST_CODE, DISCOV_ST_CODE, FLOP_ST_CODE, TR_ST_CODE, OUTCOME_ST_CODE, WAIT_STATE = range(1, 6 + 1)
+
     def __init__(self):
         super().__init__()
         self.wallet = MoneyInfo()
         self.deck = CardDeck()
-
         self.revealed = {
             'dealer1': False,
             'dealer2': False,
@@ -190,11 +201,9 @@ class UthModel(kengi.event.CogObj):
         self.player_hand = []
         self.flop_cards = []
         self.turnriver_cards = []
-
         self._stage = None
         self.set_stage(self.INIT_ST_CODE)
 
-    # avoid external modification of stage => encapsulate data
     @property
     def stage(self):
         return self._stage
@@ -205,18 +214,13 @@ class UthModel(kengi.event.CogObj):
 
     @property
     def money_info(self):
-        # returns smth in the format
-        # [(self._mod.ante, 'ante'), (self._mod.blind, 'blind'), (self._mod.bet, 'bet')]
         return [
             (self.wallet.ante, 'ante'),
             (self.wallet.blind, 'blind'),
             (self.wallet.playcost, 'bet')
         ]
 
-    # -----------------------
-    #  state transitions
-    # -----------------------
-    def evolve_state(self):
+    def evolve_state(self):  # state transitions
         if self.DISCOV_ST_CODE == self.stage:
             self.go_flop()
         elif self.FLOP_ST_CODE == self.stage:
@@ -243,14 +247,12 @@ class UthModel(kengi.event.CogObj):
         self.set_stage(self.DISCOV_ST_CODE)
 
     def go_flop(self):
-        print('GO FLOP STATE')
         for k in range(1, 3 + 1):
             self.revealed[f'flop{k}'] = True
         self.flop_cards.extend(self.deck.deal(3))
         self.set_stage(self.FLOP_ST_CODE)
 
     def go_tr_state(self):
-        print('GO TR STATE')
         # betting => betx2, or check
         self.turnriver_cards.extend(self.deck.deal(2))
         self.revealed['turn'] = self.revealed['river'] = True
@@ -263,26 +265,20 @@ class UthModel(kengi.event.CogObj):
         return self.dealer_vhand.description
 
     def go_outcome_state(self):
-        print('GO OUTCOME STATE')
         self.set_stage(self.OUTCOME_ST_CODE)
 
     def go_wait_state(self):
         # state dedicated to blit the type of hand (Two pair, Full house etc) + the outcome
-        print('autoplay OFF!')
         self.autoplay_flag = False
 
         if self.folded:
             self.wallet.announce_defeat()
             self.revealed['dealer1'] = self.revealed['dealer2'] = False
-        else:
-            # - vhand like virtual hand,
-            # because it contains 7 cards and the program should find the best possible 5-card hand
+        else:  # vhand means virtual hand (contains 7 cards and the program should find the best possible 5-card hand)
             self.dealer_vhand = find_best_ph(self.dealer_hand + self.flop_cards + self.turnriver_cards)
             self.player_vhand = find_best_ph(self.player_hand + self.flop_cards + self.turnriver_cards)
-
             dealrscore = self.dealer_vhand.value
             playrscore = self.player_vhand.value
-
             if dealrscore > playrscore:
                 self.wallet.announce_defeat()
             elif dealrscore == playrscore:
@@ -292,43 +288,22 @@ class UthModel(kengi.event.CogObj):
             self.revealed['dealer1'] = self.revealed['dealer2'] = True
         self.set_stage(self.WAIT_STATE)
 
-    def new_round(self):  # like a reset
-        # manage money:
-        # TODO could use .pev here, if animations are needed
-        #  it can be nice. To do so one would use the controller instead of lines below
-        # if self.folded:
-        #     self.loose_money()
-        # else:
-        #     a, b = self.player_vhand.value, self.dealer_vhand.value
-        #     if a <= b:
-        #         if a == b:
-        #             print('EGALITé')
-        #             self.refund_money()
-        #         else:
-        #             print('JAI PERDU')
-        #             self.loose_money()
-        #     else:
-        #         print('JE BATS DEALER')
-        #         self.earn_money()
+    def new_round(self):
         self.wallet.update_money_info()
-
-        # reset stuff
         self.deck.reset()
         self.folded = False
-
-        # HIDE cards
         for lname in self.revealed.keys():
             self.revealed[lname] = False
-
-        # remove all cards previously dealt
         del self.dealer_hand[:]
         del self.player_hand[:]
         del self.flop_cards[:]
         del self.turnriver_cards[:]
-
         self.set_stage(self.INIT_ST_CODE)
 
-    def input_bet(self, small_or_big):  # accepted values: {0, 1}
+    def input_bet(self, small_or_big):
+        """
+        :param small_or_big: accepted values: 0 or 1
+        """
         bullish_choice = small_or_big + 1
         if self.stage == self.INIT_ST_CODE:
             self.go_discov(4)  # 4 is the arbitrary val chosen for 'Ante', need to pick a val that can be
@@ -343,11 +318,9 @@ class UthModel(kengi.event.CogObj):
                 self.wallet.bet(2)
             elif self.stage == self.TR_ST_CODE:
                 self.wallet.bet(1)
-
             self.pev(MyEvTypes.EndRoundRequested, folded=False)
 
     def input_check(self):
-        # doing the CHECK only
         if self.stage == self.DISCOV_ST_CODE:
             self.go_flop()
 
@@ -362,50 +335,9 @@ class UthModel(kengi.event.CogObj):
             self.new_round()
 
 
-# -----------------------------------------------------------------/
-#              ******** VIEW ********
-# -----------------------------------------------------------------/
-BACKGROUND_IMG_PATH = 'assets/pokerbackground3.png'
-CARD_SIZE_PX = (69, 101)  # (82, 120)
-CHIP_SIZE_PX = (40, 40)  # (62, 62)
-POS_CASH = (1192 / 2, 1007 / 2)
-CARD_SLOTS_POS = {  # coords in pixel so cards/chips & BG image do match; cards img need an anchor at the middle.
-    'dealer1': (140, 48),
-    'dealer2': (140 + 40, 48),
-
-    'player1': (140, 206),
-    'player2': (140 + 40, 206),
-
-    'flop3': (238 - 40 * 2, 115),
-    'flop2': (238 - 40 * 1, 115),
-    'flop1': (238, 115),
-
-    'river': (110 - 40, 115),
-    'turn': (110, 115),
-
-    'ante': (935 / 3, 757 / 3),
-    'bet': (935 / 3, 850 / 3),
-    'blind': (1040 / 3, 757 / 3),
-
-    'raise1': (955 / 3, 870 / 3),
-    'raise2': (961 / 3, 871 / 3),
-    'raise3': (967 / 3, 872 / 3),
-    'raise4': (973 / 3, 873 / 3),
-    'raise5': (980 / 3, 875 / 3),
-    'raise6': (986 / 3, 876 / 3)
-}
-PLAYER_CHIPS = {
-    '2a': (825 / 2, 1000 / 2),
-    '2b': (905 / 2, 1000 / 2),
-    '5': (985 / 2, 1000 / 2),
-    '10': (1065 / 2, 1000 / 2),
-    '20': (1145 / 2, 1000 / 2)
-}
-
-
-class UthView(kengi.event.EventReceiver):
-    TEXTCOLOR = (5, 58, 7)
-    BG_TEXTCOLOR = (133, 133, 133)
+class UthView(kengi.EvListener):
+    TEXTCOLOR = kengi.pal.punk['flashypink']  # (5, 58, 7)
+    BG_TEXTCOLOR = (92, 92, 100)
     ASK_SELECTION_MSG = 'SELECT ONE OPTION: '
 
     def __init__(self, model):
@@ -415,24 +347,25 @@ class UthView(kengi.event.EventReceiver):
         self.chip_spr = dict()
         self._assets_rdy = False
         self._mod = model
-        self.ft = pygame.font.Font(None, 34)
-        self.small_ft = pygame.font.Font(None, 21)
+        self.small_ft = kengi.pygame.font.Font(None, 24)
         self.info_msg0 = None
         self.info_msg1 = None  # will be used to tell the player what he/she has to do!
         self.info_msg2 = None
-        txt = str(self._mod.cash) + '$ '
-        self.cash_etq = self.ft.render(txt, True, self.TEXTCOLOR, self.BG_TEXTCOLOR)  # draw cash amount
+
+        self.cash_etq = None
+        self.on_cash_changes(None, fvalue=self._mod.cash)
+        self.scrsize = kengi.get_surface().get_size()
 
     def _load_assets(self):
-        self.bg = pygame.image.load(BACKGROUND_IMG_PATH)
-        spr_sheet = kengi.gfx.JsonBasedSprSheet('assets/pxart-french-cards')
+        self.bg = kengi.pygame.image.load(BACKGROUND_IMG_PATH)
+        spr_sheet = kengi.gfx.JsonBasedSprSheet('user_assets/pxart-french-cards')
         self._my_assets['card_back'] = spr_sheet[
             'back-blue.png']  # pygame.transform.scale(spr_sheet['back-of-card.png'], CARD_SIZE_PX)
         for card_cod in StandardCard.all_card_codes():
             y = PokerHand.adhoc_mapping(card_cod[0]).lstrip('0') + card_cod[1].upper()  # convert card code to path
             self._my_assets[card_cod] = spr_sheet[
                 f'{y}.png']  # pygame.transform.scale(spr_sheet[f'{y}.png'], CARD_SIZE_PX)
-        spr_sheet2 = kengi.gfx.JsonBasedSprSheet('assets/pokerchips')
+        spr_sheet2 = kengi.gfx.JsonBasedSprSheet('user_assets/pokerchips')
         for chip_val_info in ('2a', '2b', '5', '10', '20'):
             y = {
                 '2a': 'chip02.png',
@@ -443,99 +376,75 @@ class UthView(kengi.event.EventReceiver):
             }[chip_val_info]  # adapt filename
             tempimg = spr_sheet2[y]  # pygame.transform.scale(spr_sheet2[y], CHIP_SIZE_PX)
             # tempimg.set_colorkey((255, 0, 255))
-            spr = pygame.sprite.Sprite()
+            spr = kengi.pygame.sprite.Sprite()
             spr.image = tempimg
             spr.rect = spr.image.get_rect()
             spr.rect.center = PLAYER_CHIPS[chip_val_info]
             self.chip_spr['2' if chip_val_info in ('2a', '2b') else chip_val_info] = spr
         self._assets_rdy = True
 
-    def _update_displayed_status(self):
+    def on_paint(self, ev):
+        if not self._assets_rdy:
+            self._load_assets()
+        self._paint(ev.screen)
 
+    def on_stage_changes(self, ev):
         if self._mod.stage == UthModel.INIT_ST_CODE:
-            self.info_msg0 = self.ft.render('Press ENTER to begin', True, self.TEXTCOLOR)
+            self.info_msg0 = self.small_ft.render('Press ENTER to begin', False, self.TEXTCOLOR, self.BG_TEXTCOLOR)
             self.info_msg1 = None
             self.info_msg2 = None
-            return
+        else:
+            msg = None
+            if self._mod.stage == UthModel.DISCOV_ST_CODE:
+                msg = ' CHECK, BET x3, BET x4'
+            elif self._mod.stage == UthModel.FLOP_ST_CODE and (not self._mod.autoplay_flag):
+                msg = ' CHECK, BET x2'
+            elif self._mod.stage == UthModel.TR_ST_CODE and (not self._mod.autoplay_flag):
+                msg = ' FOLD, BET x1'
+            if msg:
+                self.info_msg0 = self.small_ft.render(self.ASK_SELECTION_MSG, False, self.TEXTCOLOR, self.BG_TEXTCOLOR)
+                self.info_msg1 = self.small_ft.render(msg, False, self.TEXTCOLOR, self.BG_TEXTCOLOR)
+            # TODO display the amount lost
 
-        msg = None
-        if self._mod.stage == UthModel.DISCOV_ST_CODE:
-            msg = ' CHECK, BET x3, BET x4'
-        elif self._mod.stage == UthModel.FLOP_ST_CODE and (not self._mod.autoplay_flag):
-            msg = ' CHECK, BET x2'
-        elif self._mod.stage == UthModel.TR_ST_CODE and (not self._mod.autoplay_flag):
-            msg = ' FOLD, BET x1'
-        if msg:
-            self.info_msg0 = self.ft.render(self.ASK_SELECTION_MSG, True, self.TEXTCOLOR)
-            self.info_msg1 = self.small_ft.render(msg, True, self.TEXTCOLOR)
+    def on_cash_changes(self, ev, fvalue=None):  # RE-draw cash value
+        x = ev.value if (fvalue is None) else fvalue
+        self.cash_etq = self.small_ft.render(f'%d$ ' % x, False, self.TEXTCOLOR)
 
-    #     message_table = defaultdict(
-    #         default_factory=lambda: None, {
-    #             UthModel.INIT_ST_CODE: 'press SPACE to play',
-    #             UthModel.DISCOV_ST_CODE: 'CHECK, BET x3, BET x4',
-    #             UthModel.FLOP_ST_CODE: 'CHECK, BET x2',
-    #             UthModel.TR_ST_CODE: 'FOLD, BET x1'
-    #         }
-    #     )
-    #     elif ev.type == MyEvTypes.PlayerWins:
-    #     self.delta_money = ev.amount
-    #     self.info_msg0 = self.ft.render('Victory', True, self.TEXTCOLOR)
-    #
-    # elif ev.type == MyEvTypes.PlayerLooses:
-    # # TODO disp. amount lost
-    # self.info_msg0 = self.ft.render('Defeat', True, self.TEXTCOLOR)
+    def on_victory(self, ev):
+        result = ev.amount
+        infoh_player = self._mod.player_vhand.description
+        infoh_dealer = self._mod.dealer_vhand.description
+        msg = f"Player: {infoh_player}; Dealer: {infoh_dealer}; Change {result}$"
+        self.info_msg0 = self.small_ft.render('Victory!', False, self.TEXTCOLOR)
+        self.info_msg1 = self.small_ft.render(msg, False, self.TEXTCOLOR)
+        self.info_msg2 = self.small_ft.render('BACKSPACE to restart', False, self.TEXTCOLOR)
 
-    def proc_event(self, ev, source):
-        if ev.type == EngineEvTypes.PAINT:
-            if not self._assets_rdy:
-                self._load_assets()
-            self._paint(ev.screen)
+    def on_tie(self, ev):
+        self.info_msg0 = self.small_ft.render('Its a Tie.', True, self.TEXTCOLOR)
+        infoh_player = self._mod.player_vhand.description
+        infoh_dealer = self._mod.dealer_vhand.description
+        self.info_msg1 = self.small_ft.render(
+            f"Player: {infoh_player}; Dealer: {infoh_dealer}; Change {0}$",
+            True, self.TEXTCOLOR
+        )
+        self.info_msg2 = self.small_ft.render('BACKSPACE to restart', False, self.TEXTCOLOR)
 
-        elif ev.type == MyEvTypes.StageChanges:
-            self._update_displayed_status()
-
-        elif ev.type == MyEvTypes.CashChanges:
-            # RE-draw cash value
-            self.cash_etq = self.ft.render(str(ev.value) + '$ ', True, self.TEXTCOLOR, self.BG_TEXTCOLOR)
-
-        elif ev.type == MyEvTypes.Victory:
-            print('victory event received')
-            result = ev.amount
-            infoh_player = self._mod.player_vhand.description
+    def on_defeat(self, ev):
+        if self._mod.folded:
+            msg = 'Player folded.'
+        else:
+            msg = 'Defeat.'
+        self.info_msg0 = self.small_ft.render(msg, True, self.TEXTCOLOR)
+        result = ev.loss
+        if self._mod.folded:
+            self.info_msg1 = self.small_ft.render(f"You lost {result}$", False, self.TEXTCOLOR)
+        else:
             infoh_dealer = self._mod.dealer_vhand.description
-            msg = f"Player: {infoh_player}; Dealer: {infoh_dealer}; Change {result}$"
-            self.info_msg0 = self.ft.render('Victory!', True, self.TEXTCOLOR)
-            self.info_msg1 = self.small_ft.render(msg, True, self.TEXTCOLOR)
-            self.info_msg2 = self.small_ft.render('Press BACKSPACE to restart', True, self.TEXTCOLOR)
-
-        elif ev.type == MyEvTypes.Tie:
-            print('tie event received')
-            self.info_msg0 = self.ft.render('Its a Tie.', True, self.TEXTCOLOR)
             infoh_player = self._mod.player_vhand.description
-            infoh_dealer = self._mod.dealer_vhand.description
             self.info_msg1 = self.small_ft.render(
-                f"Player: {infoh_player}; Dealer: {infoh_dealer}; Change {0}$",
-                True, self.TEXTCOLOR
+                f"Player: {infoh_player}; Dealer: {infoh_dealer}; You've lost {result}$", False, self.TEXTCOLOR
             )
-            self.info_msg2 = self.small_ft.render('Press BACKSPACE to restart', True, self.TEXTCOLOR)
-
-        elif ev.type == MyEvTypes.Defeat:
-            print('defeat event received')
-            if self._mod.folded:
-                msg = 'Player folded.'
-            else:
-                msg = 'Defeat.'
-            self.info_msg0 = self.ft.render(msg, True, self.TEXTCOLOR)
-            result = ev.loss
-            if self._mod.folded:
-                self.info_msg1 = self.small_ft.render(f"You've lost {result}$", True, self.TEXTCOLOR)
-            else:
-                infoh_dealer = self._mod.dealer_vhand.description
-                infoh_player = self._mod.player_vhand.description
-                self.info_msg1 = self.small_ft.render(
-                    f"Player: {infoh_player}; Dealer: {infoh_dealer}; You've lost {result}$", True, self.TEXTCOLOR
-                )
-            self.info_msg2 = self.small_ft.render('Press BACKSPACE to restart', True, self.TEXTCOLOR)
+        self.info_msg2 = self.small_ft.render('BACKSPACE to restart', False, self.TEXTCOLOR)
 
     @staticmethod
     def centerblit(refscr, surf, p):
@@ -583,7 +492,7 @@ class UthView(kengi.event.EventReceiver):
         # -- draw amounts for ante, blind and the bet
         for info_e in self._mod.money_info:
             x, name = info_e
-            lbl_surf = self.ft.render(f'{x}', True, self.TEXTCOLOR, self.BG_TEXTCOLOR)
+            lbl_surf = self.small_ft.render(f'{x}', True, self.TEXTCOLOR, self.BG_TEXTCOLOR)
             refscr.blit(lbl_surf, CARD_SLOTS_POS[name])
 
         # -- draw chips & the total cash amount
@@ -594,7 +503,7 @@ class UthView(kengi.event.EventReceiver):
             refscr.blit(adhoc_spr.image, adhoc_spr.rect.topleft)
         self.chip_spr['2'].rect.center = PLAYER_CHIPS['2a']
         refscr.blit(self.chip_spr['2'].image, self.chip_spr['2'].rect.topleft)
-        refscr.blit(self.cash_etq, POS_CASH)
+        refscr.blit(self.cash_etq, (self.scrsize[0]+OFFSET_CASH[0], self.scrsize[1]+OFFSET_CASH[1]))
 
         # -- display all 3 prompt messages
         for rank, e in enumerate((self.info_msg0, self.info_msg1, self.info_msg2)):
@@ -602,107 +511,90 @@ class UthView(kengi.event.EventReceiver):
                 refscr.blit(e, (24, 10 + 50 * rank))
 
 
-# -----------------------------------------------------------------/
-#              ******** CONTROLLER ********
-# -----------------------------------------------------------------/
-class UthCtrl(kengi.event.EventReceiver):
+class UthCtrl(kengi.EvListener):
     AUTOPLAY_DELAY = 0.8  # sec
 
-    def __init__(self, model):
+    def __init__(self, model, refgame):
         super().__init__()
         self._mod = model
         self._last_t = None
         self.elapsed = 0
         self.recent_date = None
+        self.refgame = refgame
 
-    def proc_event(self, ev, source):
-        global stop_game_flag
+    def on_keydown(self, ev):
+        if ev.key == kengi.pygame.K_ESCAPE:
+            self.refgame.gameover = True
 
-        if ev.type == EngineEvTypes.LOGICUPDATE:
-            self.recent_date = ev.curr_t
-            if self._mod.autoplay_flag:
-                elapsed = ev.curr_t - self._last_t
-                if elapsed > self.AUTOPLAY_DELAY:
-                    self._mod.evolve_state()
-                    self._last_t = ev.curr_t
-
-        elif ev.type == MyEvTypes.EndRoundRequested:
-            self._mod.autoplay_flag = True
-            self._mod.evolve_state()
-            self._last_t = self.recent_date
-
-        elif ev.type == pygame.KEYDOWN:  # -------- manage keyboard
-            if ev.key == pygame.K_ESCAPE:
-                stop_game_flag = True
-
-            if self._mod.autoplay_flag:
-                return
-
+        elif not self._mod.autoplay_flag:
             # backspace will be used to CHECK / FOLD
-            if ev.key == pygame.K_BACKSPACE:
+            if ev.key == kengi.pygame.K_BACKSPACE:
                 self._mod.input_check()
-
             # enter will be used to select the regular BET option, x3, x2 or x1 depends on the stage
-            elif ev.key == pygame.K_RETURN:
-                # ignore non-valid case
+            elif ev.key == kengi.pygame.K_RETURN:
                 self._mod.input_bet(0)
-
             # case: at the beginning of the game the player can select the MEGA-BET x4 lets use space for that
             # we'll also use space to begin the game. State transition: init -> discov
-            elif ev.key == pygame.K_SPACE:
-                if self._mod.stage == UthModel.INIT_ST_CODE:
-                    return
-                if self._mod.stage != UthModel.DISCOV_ST_CODE:
-                    return
-                self._mod.input_bet(1)
+            elif ev.key == kengi.pygame.K_SPACE:
+                if self._mod.stage != UthModel.INIT_ST_CODE:
+                    if self._mod.stage == UthModel.DISCOV_ST_CODE:
+                        self._mod.input_bet(1)
+
+    def on_update(self, ev):
+        self.recent_date = ev.curr_t
+        if self._mod.autoplay_flag:
+            elapsed = ev.curr_t - self._last_t
+            if elapsed > self.AUTOPLAY_DELAY:
+                self._mod.evolve_state()
+                self._last_t = ev.curr_t
+
+    def on_end_round_requested(self, ev):
+        self._mod.autoplay_flag = True
+        self._mod.evolve_state()
+        self._last_t = self.recent_date
 
 
-stop_game_flag = False
-m = v = c = None
-e_gateway = kengi.event.CogObj()
+class PokerUth(kengi.GameTpl):
 
-gl_scrref = None
+    def __init__(self):
+        self._manager = None
+        super().__init__()
+        self.m = None
+        self.evli_li = list()
 
+    def enter(self, vms):
+        kengi.init(3)
+        self._manager = kengi.get_ev_manager()
+        self._manager.setup(MyEvTypes)
+        self.m = UthModel()
+        for e in (
+            UthView(self.m),
+            UthCtrl(self.m, self)
+        ):
+            e.turn_on()
 
-# @katasdk.tag_gameenter
-def game_enter(vmstate):
-    global gl_scrref, e_gateway
-    kengi.init(3)
-    m = UthModel()
-    v = UthView(m)
-    c = UthCtrl(m)
-    v.turn_on()
-    c.turn_on()
-    gl_scrref = kengi.get_surface()
-
-    # link the manager manually, so we can use OLD version of kengi
-    # ---
-    e_gateway.manager = kengi.event.EventManager.instance()
-
-
-
-# @katasdk.tag_gameupdate
-def game_update(info_t=None):
-    global e_gateway
-    e_gateway.pev(EngineEvTypes.LOGICUPDATE, curr_t=info_t)
-    e_gateway.pev(EngineEvTypes.PAINT, screen=gl_scrref)
-    e_gateway.manager.update()
-    if stop_game_flag:
-        return WARP_BACK
-    kengi.flip()
+    def update(self, infot):
+        super().update(infot)
+        if self.gameover:
+            return WARP_BACK
 
 
-# @katasdk.tag_gameexit
-def game_exit(vmstate):
-    global e_gateway
-    e_gateway.manager.hard_reset()
-    kengi.quit()
+game_obj = PokerUth()
+katasdk.gkart_activation(game_obj)
 
 
+# -----------------
+# local ctx run
+# -----------------
 import time
-if __name__ == '__main__':
-    game_enter(None)
 
-    while not stop_game_flag:
-        game_update(time.time())
-    game_exit(None)
+
+if __name__ == '__main__':
+    game_obj.enter(None)
+
+    while not game_obj.gameover:
+        tmp = game_obj.update(time.time() )
+        if tmp and tmp[0] == 2:
+            game_obj.gameover = True
+    game_obj.exit(None)
+    print('sortie clean')

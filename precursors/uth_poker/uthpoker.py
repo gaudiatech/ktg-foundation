@@ -15,11 +15,25 @@ without you having any further betting options)
 you can either: Fold / Bet 1x the ante. You cannot check anymore since the river is out.
 """
 
-import katagames_sdk as katasdk
-katasdk.bootstrap()
+
+class DynComponent:
+    """relies either on bare Kengi or on the KataSDK+Kengi combo"""
+    def provide_kengi(self):
+        import katagames_engine as _kengi
+        _kengi.bootstrap_e()
+        return _kengi
 
 
-kengi = katasdk.kengi
+class ExtComponent(DynComponent):
+    def provide_kengi(self):
+        import katagames_sdk as katasdk
+        katasdk.bootstrap()
+        return katasdk.kengi
+
+
+dyncomp = DynComponent()
+kengi = dyncomp.provide_kengi()
+
 find_best_ph = kengi.tabletop.find_best_ph
 Card = kengi.tabletop.StandardCard
 CardDeck = kengi.tabletop.CardDeck
@@ -627,7 +641,9 @@ class PokerUth(kengi.GameTpl):
 
 
 game_obj = PokerUth()
-katasdk.gkart_activation(game_obj)
+
+if not isinstance(dyncomp, DynComponent):  # only if katasdk is active
+    katasdk.gkart_activation(game_obj)
 
 
 # -----------------

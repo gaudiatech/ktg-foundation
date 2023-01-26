@@ -2,10 +2,11 @@ import common
 from WalletModel import WalletModel
 
 
-kengi = common.kengi
-find_best_ph = kengi.tabletop.find_best_ph
-CardDeck = kengi.tabletop.CardDeck
 MyEvTypes = common.MyEvTypes
+
+kengi = common.kengi
+CardDeck = kengi.tabletop.CardDeck
+find_best_ph = kengi.tabletop.find_best_ph
 
 PokerStates = kengi.struct.enum(
     'AnteSelection',
@@ -16,7 +17,6 @@ PokerStates = kengi.struct.enum(
 )
 
 
-# -----------------------------------------------------
 class UthModel(kengi.Emitter):
     """
     Uth: Ultimate Texas Holdem
@@ -27,8 +27,11 @@ class UthModel(kengi.Emitter):
         super().__init__()
         self.wallet = WalletModel(250)  # TODO link with CR and use the real wealth value
 
+        self.match_over = False
         self.bet_done = False
         self.player_folded = False
+        self.prev_total_bet = 0
+        self.result = None
 
         # ---------------
         # CARD MANAGEMENT
@@ -62,7 +65,10 @@ class UthModel(kengi.Emitter):
         # ----------------
         self._pokerstate = None
         self.possible_bet_factor = None  # will be [3, 4] then [2, ] then [1, ]
-        self.goto_next_state()
+        self._goto_next_state()
+
+    def quantify_reward(self):
+        return self.wallet.prev_earnings
 
     def get_card_code(self, info):
         """
@@ -108,16 +114,20 @@ class UthModel(kengi.Emitter):
         return self.wallet.all_infos
 
     def _proc_state(self, newstate):
-        if newstate == PokerStates.PreFlop:
+        if newstate == PokerStates.AnteSelection:
+            self.possible_bet_factor = None
+            # self.init_new_round()
+
+        elif newstate == PokerStates.PreFlop:
             print('hi im in preflop')
             self.possible_bet_factor = [3, 4]
             # cards have been dealt !
             self.wallet.ready_to_start = True
-            self.visibility['player2'] = self.visibility['player1'] = True
+
             # TODO should be deck.draw_cards(2) or smth
             self.dealer_hand.extend(self.deck.deal(2))
             self.player_hand.extend(self.deck.deal(2))
-            self.wallet.start_match()
+            self.visibility['player2'] = self.visibility['player1'] = True
 
         elif newstate == PokerStates.Flop:
             print('hi im in the flop state')
@@ -134,56 +144,59 @@ class UthModel(kengi.Emitter):
             self.visibility['turn'] = self.visibility['river'] = True
 
         elif newstate == PokerStates.Outcome:
-            print('-- -- -in outcome state')
             self.possible_bet_factor = None
             self.visibility['dealer1'] = self.visibility['dealer2'] = True
 
             # state dedicated to blit the type of hand (Two pair, Full house etc) + the outcome
             if self.player_folded:
-                self.wallet.tag_defeat(True)  # TODO ability to push the ante bet
+                self.result = -1
+                self.wallet.impact_fold()
             else:
                 self.dealer_vhand = find_best_ph(self.dealer_hand + self.flop_cards + self.turnriver_cards)
                 self.player_vhand = find_best_ph(self.player_hand + self.flop_cards + self.turnriver_cards)
-                dealrscore = self.dealer_vhand.value
-                playrscore = self.player_vhand.value
-                if dealrscore == playrscore:
-                    self.wallet.announce_tie()  # TODO gere égalité correctement
-                elif dealrscore > playrscore:
-                    self.wallet.tag_defeat(True)
-                else:  # victory
-                    self.wallet.pay_for_victory(self.player_vhand)
+                self.result = self.wallet.resolve(self.player_vhand, self.dealer_vhand)
 
-            self.visibility['dealer1'] = self.visibility['dealer2'] = True
+            self.match_over = True
+            self.pev(MyEvTypes.MatchOver, won=self.result)
 
-    def goto_next_state(self):
+    def _goto_next_state(self):
         """
         iterate the game (pure game logic)
         """
+        if self._pokerstate is None:
+            self.init_new_round()
+
+        elif self._pokerstate == PokerStates.AnteSelection:
+            self.prev_total_bet = sum(self.wallet.all_infos)
+            print('total bet is... =', self.prev_total_bet)
+
         tr_table = {
             None: PokerStates.AnteSelection,
             PokerStates.AnteSelection: PokerStates.PreFlop,
             PokerStates.PreFlop: PokerStates.Flop,
             PokerStates.Flop: PokerStates.TurnRiver,
             PokerStates.TurnRiver: PokerStates.Outcome,
+            PokerStates.Outcome: None
         }
         self._pokerstate = tr_table[self._pokerstate]
-        self._proc_state(self._pokerstate)  # what actions are needed to update the model?
-        self.pev(MyEvTypes.StateChanges, pokerstate=self._pokerstate)
 
-        # if self.PREFLOP_PHASE == self.stage:
-        #     self.goto_flop()
-        # elif self.FLOP_PHASE == self.stage:
-        #     self.goto_turnriver()
-        # elif self.TR_PHASE == self.stage:
-        #     self.goto_outcome()
-        # elif self.OUTCOME_ST_CODE == self.stage:
-        #     self.go_wait_state()
+        if self._pokerstate is None:
+            return False
+        else:
+            self._proc_state(self._pokerstate)  # what actions are needed to update the model?
+            self.pev(MyEvTypes.StateChanges, pokerstate=self._pokerstate)
+            return True
 
-    # def set_stage(self, sid):
-    #     assert 0 < sid <= 7
-    #     self.stage = sid
-    #     print(f' --new state-- >>> {sid}')
-    #     self.pev(common.MyEvTypes.StageChanges)
+    def check(self):
+        self._goto_next_state()
+
+    def fold(self):
+        self.player_folded = True
+        self._goto_next_state()
+
+    def reboot_match(self):
+        self._pokerstate = None
+        self._goto_next_state()
 
     @property
     def pl_hand_description(self):
@@ -193,18 +206,23 @@ class UthModel(kengi.Emitter):
     def dl_hand_description(self):
         return self.dealer_vhand.description
 
-    def new_round(self):
-        # self.wallet.update_money_info()
-        self.wallet.start_match()
-        self.deck.reset()
-        self.folded = False
-        for lname in self.visibility.keys():
-            self.visibility[lname] = False
+    def init_new_round(self):
+        print('-------------model init new round --------------------')
+        self.match_over = False
+        self.wallet.reset()
+
         del self.dealer_hand[:]
         del self.player_hand[:]
         del self.flop_cards[:]
         del self.turnriver_cards[:]
-        self.set_stage(self.BET0_PHASE)
+
+        for lname in self.visibility.keys():
+            self.visibility[lname] = False
+
+        self.deck.reset()
+        self.bet_done = False
+        self.player_folded = False
+        self.pev(MyEvTypes.NewMatch)
 
     def select_bet(self, bullish_choice=False):
         if bullish_choice and self._pokerstate != PokerStates.PreFlop:
@@ -212,31 +230,17 @@ class UthModel(kengi.Emitter):
         b_factor = self.possible_bet_factor[0]
         if bullish_choice:
             b_factor = self.possible_bet_factor[1]
-
         self.wallet.bet(b_factor)
-        self.goto_next_state()
+        self.bet_done = True
 
-        # if self.stage == self.SETANTE_PHASE:
-        #     self.deal_pl_cards()
-        # elif self.stage == self.OUTCOME_PHASE:
-        #     self.new_round()
-        # else:
-        #     if self.stage == self.BET0_PHASE:
-        #         if bullish_choice == 1:
-        #             self.wallet.bet(3)
-        #         else:
-        #             self.wallet.bet(4)
-        #     elif self.stage == self.FLOP_PHASE:
-        #         self.wallet.bet(2)
-        #     elif self.stage == self.TR_PHASE:
-        #         self.wallet.bet(1)
-        #     self.pev(MyEvTypes.EndRoundRequested, folded=False)
+        self._goto_next_state()
+        self.pev(MyEvTypes.RienNeVaPlus)
 
-    def select_check(self):
-        if self.stage == self.PREFLOP_PHASE:
-            self.goto_flop()
-        elif self.stage == self.FLOP_PHASE:
-            self.goto_turnriver()
-        elif self.stage == self.TR_PHASE:
-            self.player_folded = True
-            self.pev(MyEvTypes.EndRoundRequested, folded=True)
+    # def select_check(self):
+    #     if self.stage == self.PREFLOP_PHASE:
+    #         self.goto_flop()
+    #     elif self.stage == self.FLOP_PHASE:
+    #         self.goto_turnriver()
+    #     elif self.stage == self.TR_PHASE:
+    #         self.player_folded = True
+    #         self.pev(MyEvTypes.RienNeVaPlus)

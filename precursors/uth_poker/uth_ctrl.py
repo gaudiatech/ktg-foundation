@@ -1,10 +1,9 @@
-# from uth_model import WalletMod
 import common
-import time
-
 from uth_poker.uth_model import PokerStates
 
+
 kengi = common.kengi
+MyEvTypes = common.MyEvTypes
 
 
 class UthCtrl(kengi.EvListener):
@@ -30,35 +29,52 @@ class UthCtrl(kengi.EvListener):
         self.autoplay = False
         self._last_t = None
 
+    def on_chip_cycle(self, ev):
+        chval = self._mod.get_chipvalue()
+        if ev.upwards:
+            common.chip_scrollup(chval)
+        else:
+            common.chip_scrolldown(chval)
+
     def on_keydown(self, ev):
         if ev.key == kengi.pygame.K_ESCAPE:
             self.refgame.gameover = True
+            return
 
-        # backspace will be used to CHECK / FOLD
-        elif ev.key == kengi.pygame.K_BACKSPACE:
-            print('[Ctrl] - player check')
-            self._mod.goto_next_state()
+        if self._mod.stage == PokerStates.AnteSelection:
+            if ev.key == kengi.pygame.K_DOWN:
+                self.pev(MyEvTypes.ChipCycle, upwards=False)
+            elif ev.key == kengi.pygame.K_UP:
+                self.pev(MyEvTypes.ChipCycle, upwards=True)
+            elif ev.key == kengi.pygame.K_BACKSPACE:
+                self._mod.check()
+            return
 
-        # enter will be used to select the regular BET option, x3, x2 or x1 depends on the stage
-        elif ev.key == kengi.pygame.K_RETURN:
-            # print('[Ctrl] - player regular bet')
-            if self._mod.stage != PokerStates.AnteSelection:
-            #     self._mod.goto_next_state()
-            # else:
-                self._mod.select_bet()
+        if not self._mod.match_over:
+            # backspace will be used to CHECK / FOLD
+            if ev.key == kengi.pygame.K_BACKSPACE:
+                if self._mod.stage == PokerStates.TurnRiver:
+                    self._mod.fold()
+                else:
+                    self._mod.check()
 
-        # case: at the beginning of the game the player can select the MEGA-BET x4 lets use space for that
-        # we'll also use space to begin the game. State transition: init -> discov
-        elif ev.key == kengi.pygame.K_SPACE:
-            print('[Ctrl] - player maxi bet, x4')
-            if self._mod.stage != UthModel.BET_PHASE:
-                if self._mod.stage == UthModel.DISCOV_ST_CODE:
-                    self._mod.input_bet(1)
+            # enter will be used to select the regular
+            elif ev.key == kengi.pygame.K_RETURN:
+                if self._mod.stage != PokerStates.AnteSelection:
+                    self._mod.select_bet()  # a BET operation (x3, x2 or even x1, it depends on the stage)
 
-    def on_end_round_requested(self, ev):
+            # case: on the pre-flop the player can select a MEGA-BET (x4) lets use space for this action!
+            elif ev.key == kengi.pygame.K_SPACE:
+                if self._mod.stage == PokerStates.PreFlop:
+                    self._mod.select_bet(True)
+
+    def on_mousedown(self, ev):
+        if self._mod.match_over:
+            # force a new round!
+            self._mod.reboot_match()
+
+    def on_rien_ne_va_plus(self, ev):
         self.autoplay = True
-        self._mod.evolve_state()
-
         self.elapsed_t = 0
         self._last_t = None
 
@@ -66,11 +82,14 @@ class UthCtrl(kengi.EvListener):
         if self.autoplay:
             if self._last_t is None:
                 self._last_t = ev.curr_t
-                return
-            dt = ev.curr_t - self._last_t
-            self.elapsed_t += dt
-            self._last_t = ev.curr_t
-
-            if self.elapsed_t > self.AUTOPLAY_DELAY:
-                self.elapsed_t = 0
-                self._mod.evolve_state()
+            else:
+                dt = ev.curr_t - self._last_t
+                self.elapsed_t += dt
+                self._last_t = ev.curr_t
+                if self.elapsed_t > self.AUTOPLAY_DELAY:
+                    self.elapsed_t = 0
+                    rez = self._mod._goto_next_state()  # returns False if there's no next state
+                    if not rez:
+                        self.autoplay = False
+                        self.elapsed_t = 0
+                        self._last_t = None

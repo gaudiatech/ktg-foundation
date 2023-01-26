@@ -1,5 +1,5 @@
 import common
-from uth_model import UthModel, PokerStates
+from uth_model import PokerStates
 
 
 kengi = common.kengi
@@ -75,32 +75,52 @@ class UthView(kengi.EvListener):
         self.on_money_update(None)  # force update
 
         self.scrsize = kengi.get_surface().get_size()
-        self.midscreen_pt = [
-            self.scrsize[0]//2,
-            self.scrsize[1]//2
+
+        unstake_button = kengi.gui.Button2(None, 'Start', (330, 128))
+
+        # --- cycle right button
+        cycle_r_button = kengi.gui.Button2(None, '>', (133, 266))
+
+        def cb0():
+            print('cb0')
+            kengi.get_ev_manager().post(MyEvTypes.ChipCycle, upwards=True)
+
+        cycle_r_button.set_callback(cb0)
+
+        # --- cycle left button
+        cycle_l_button = kengi.gui.Button2(None, '<', (133-80, 266))
+        def cb1():
+            print(cb1)
+            kengi.get_ev_manager().post(MyEvTypes.ChipCycle, upwards=False)
+
+        cycle_l_button.set_callback(cb1)
+
+        # ---
+        stake_button = kengi.gui.Button2(None, ' ... ', (133-40, 266))
+        self.all_buttons = [
+            unstake_button,
+            cycle_r_button,
+            cycle_l_button,
+            stake_button
         ]
+        self.chip_scr_pos = [
+            stake_button.position[0] + 11,
+            stake_button.position[1] - 17
+        ]
+
+    def turn_on(self):
+        super().turn_on()
+        for b in self.all_buttons:
+            b.turn_on()
+
+    def turn_off(self):
+        super().turn_off()
+        for b in self.all_buttons:
+            b.turn_off()
 
     def on_chip_update(self, ev):
         print('[View] reception chipval update :::', ev.value)
         self.chip_adhoc_image = self.chip_spr[str(ev.value)].image
-
-    def on_keydown(self, ev):
-        omega = (2, 5, 10, 20)
-        curridx = omega.index(self._mod.get_chipvalue())
-        ch = False
-
-        if ev.key == pygame.K_DOWN:
-            curridx -= 1
-            if curridx < 0:
-                curridx = len(omega)-1
-            ch = True
-        elif ev.key == pygame.K_UP:
-            curridx = (curridx+1) % len(omega)
-            ch = True
-
-        if ch:
-            y = omega[curridx]
-            self._mod.set_chipvalue(y)
 
     def _load_assets(self):
         self.bg = kengi.pygame.image.load(BACKGROUND_IMG_PATH)
@@ -155,54 +175,60 @@ class UthView(kengi.EvListener):
                 self.info_msg1 = self.small_ft.render(msg, False, self.TEXTCOLOR, self.BG_TEXTCOLOR)
             # TODO display the amount lost
 
-    def on_mousedown(self, ev):
-        self._mod.wallet.stake_chip()
+    # def on_mousedown(self, ev):
+    #     if self._mod.stage == PokerStates.AnteSelection:
+    #         self._mod.wallet.stake_chip()
 
     def on_money_update(self, ev):  # , fvalue=None):  # RE-draw cash value
-        # x = self._mod.chipvalue
+        self._refresh_money_labels()
+
+    def on_new_match(self, ev):
+        self._refresh_money_labels()
+
+    def _refresh_money_labels(self):
         x = self._mod.get_balance()
         _, antev, blindv, _ = self._mod.get_all_bets()
-
         self.ante_etq = self.small_ft.render(f'%d$ ' % antev, False, self.TEXTCOLOR)
         self.blind_etq = self.small_ft.render(f'%d$ ' % blindv, False, self.TEXTCOLOR)
-
         self.cash_etq = self.small_ft.render(f'%d$ ' % x, False, self.TEXTCOLOR)
 
-    def on_victory(self, ev):
-        result = ev.amount
-        infoh_player = self._mod.player_vhand.description
-        infoh_dealer = self._mod.dealer_vhand.description
-        msg = f"Player: {infoh_player}; Dealer: {infoh_dealer}; Change {result}$"
-        self.info_msg0 = self.small_ft.render('Victory!', False, self.TEXTCOLOR)
-        self.info_msg1 = self.small_ft.render(msg, False, self.TEXTCOLOR)
-        self.info_msg2 = self.small_ft.render('BACKSPACE to restart', False, self.TEXTCOLOR)
+    def on_match_over(self, ev):
+        self.info_msg2 = self.small_ft.render('click once to restart', False, self.TEXTCOLOR)
 
-    def on_tie(self, ev):
-        self.info_msg0 = self.small_ft.render('Its a Tie.', True, self.TEXTCOLOR)
-        infoh_player = self._mod.player_vhand.description
-        infoh_dealer = self._mod.dealer_vhand.description
-        self.info_msg1 = self.small_ft.render(
-            f"Player: {infoh_player}; Dealer: {infoh_dealer}; Change {0}$",
-            True, self.TEXTCOLOR
-        )
-        self.info_msg2 = self.small_ft.render('BACKSPACE to restart', False, self.TEXTCOLOR)
-
-    def on_defeat(self, ev):
-        if self._mod.folded:
-            msg = 'Player folded.'
-        else:
-            msg = 'Defeat.'
-        self.info_msg0 = self.small_ft.render(msg, True, self.TEXTCOLOR)
-        result = ev.loss
-        if self._mod.folded:
-            self.info_msg1 = self.small_ft.render(f"You lost {result}$", False, self.TEXTCOLOR)
-        else:
-            infoh_dealer = self._mod.dealer_vhand.description
+        if ev.won == 0:  # tie
+            self.info_msg0 = self.small_ft.render('Its a Tie.', True, self.TEXTCOLOR)
             infoh_player = self._mod.player_vhand.description
+            infoh_dealer = self._mod.dealer_vhand.description
             self.info_msg1 = self.small_ft.render(
-                f"Player: {infoh_player}; Dealer: {infoh_dealer}; You've lost {result}$", False, self.TEXTCOLOR
+                f"Player: {infoh_player}; Dealer: {infoh_dealer}; Change {0}$",
+                True, self.TEXTCOLOR
             )
-        self.info_msg2 = self.small_ft.render('BACKSPACE to restart', False, self.TEXTCOLOR)
+        elif ev.won == 1:  # won indeed
+            result = self._mod.quantify_reward()
+
+            infoh_player = self._mod.player_vhand.description
+            infoh_dealer = self._mod.dealer_vhand.description
+            msg = f"Player: {infoh_player}; Dealer: {infoh_dealer}; Change {result}$"
+            self.info_msg0 = self.small_ft.render('Victory!', False, self.TEXTCOLOR)
+            self.info_msg1 = self.small_ft.render(msg, False, self.TEXTCOLOR)
+        elif ev.won == -1:  # lost
+            if self._mod.player_folded:
+                msg = 'Player folded.'
+            else:
+                msg = 'Defeat.'
+            self.info_msg0 = self.small_ft.render(msg, True, self.TEXTCOLOR)
+            result = self._mod.prev_total_bet
+
+            if self._mod.player_folded:
+                self.info_msg1 = self.small_ft.render(f"You lost {result}$", False, self.TEXTCOLOR)
+            else:
+                infoh_dealer = self._mod.dealer_vhand.description
+                infoh_player = self._mod.player_vhand.description
+                self.info_msg1 = self.small_ft.render(
+                    f"Player: {infoh_player}; Dealer: {infoh_dealer}; You've lost {result}$", False, self.TEXTCOLOR
+                )
+        else:
+            raise ValueError('MatchOver event contains a non-valid value for attrib "won". Received value:', ev.won)
 
     @staticmethod
     def centerblit(refscr, surf, p):
@@ -215,16 +241,26 @@ class UthView(kengi.EvListener):
 
         # ---------- draw chip value if the phase is still "setante"
         if self._mod.stage == PokerStates.AnteSelection:
-            target_pt = (
-                self.midscreen_pt[0],
-                self.midscreen_pt[1] + 100
-            )
-            UthView.centerblit(refscr, self.chip_adhoc_image, target_pt)
+            # - draw chips + buttons
+            for k, v in enumerate((2, 5, 10, 20)):
+                adhoc_spr = self.chip_spr[str(v)]
+                if v == 2:
+                    adhoc_spr.rect.center = PLAYER_CHIPS['2b']
+                refscr.blit(adhoc_spr.image, adhoc_spr.rect.topleft)
+            self.chip_spr['2'].rect.center = PLAYER_CHIPS['2a']
+            refscr.blit(self.chip_spr['2'].image, self.chip_spr['2'].rect.topleft)
 
+            UthView.centerblit(refscr, self.chip_adhoc_image, self.chip_scr_pos)
+
+            # draw ante & blind amounts
             refscr.blit(self.ante_etq, MONEY_POS['ante'])
             refscr.blit(self.blind_etq, MONEY_POS['blind'])
 
-        if self._mod.stage != PokerStates.AnteSelection:  # draw all cards, unless the state is AnteSelection
+            for b in self.all_buttons:
+                refscr.blit(b.image, b.position)
+
+        else:
+            # draw all cards, unless the state is AnteSelection
             for loc in CARD_SLOTS_POS.keys():
                 if self._mod.visibility[loc]:
                     desc = self._mod.get_card_code(loc)
@@ -233,23 +269,10 @@ class UthView(kengi.EvListener):
                     x = cardback
                 UthView.centerblit(refscr, x, CARD_SLOTS_POS[loc])
 
-        # -- draw amounts for ante, blind and the bet
-        # for info_e in self._mod.money_info:
-        #     x, name = info_e
-        #     lbl_surf = self.small_ft.render(f'{x}', True, self.TEXTCOLOR, self.BG_TEXTCOLOR)
-        #     refscr.blit(lbl_surf, CARD_SLOTS_POS[name])
-
-        # -- draw chips & the total cash amount
-        for k, v in enumerate((2, 5, 10, 20)):
-            adhoc_spr = self.chip_spr[str(v)]
-            if v == 2:
-                adhoc_spr.rect.center = PLAYER_CHIPS['2b']
-            refscr.blit(adhoc_spr.image, adhoc_spr.rect.topleft)
-        self.chip_spr['2'].rect.center = PLAYER_CHIPS['2a']
-        refscr.blit(self.chip_spr['2'].image, self.chip_spr['2'].rect.topleft)
+        # - do this for any PokerState
+        # draw the amount of cash
         refscr.blit(self.cash_etq, (self.scrsize[0]+OFFSET_CASH[0], self.scrsize[1]+OFFSET_CASH[1]))
-
-        # -- display all 3 prompt messages
+        # display all 3 prompt messages
         for rank, e in enumerate((self.info_msg0, self.info_msg1, self.info_msg2)):
             if e is not None:
                 refscr.blit(e, (24, 10 + 50 * rank))

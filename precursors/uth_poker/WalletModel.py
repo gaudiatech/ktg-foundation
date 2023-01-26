@@ -90,23 +90,20 @@ class WalletModel(kengi.Emitter):
         if y != self._wealth:
             self.pev(MyEvTypes.MoneyUpdate, value=self._wealth)
 
+    def reset(self):
+        for bslot in self.bets.keys():
+            self.bets[bslot] = 0
+
     def select_trips(self, val):
         self.bets['trips'] = val
         self.pev(MyEvTypes.BetUpdate)
 
     @property
     def all_infos(self):
-        return (
-            self.bets['trips'], self.bets['ante'], self.bets['blind'], self.bets['play']
-        )
+        return self.bets['trips'], self.bets['ante'], self.bets['blind'], self.bets['play']
 
     def get_balance(self):
         return self._wealth
-
-    def start_match(self):
-        if not self.ready_to_start:
-            raise RuntimeError('cannot start match while chips are not staked!')
-        # go to bet0 phase
 
     def bet(self, multiplier):
         """
@@ -122,17 +119,6 @@ class WalletModel(kengi.Emitter):
     def _reset_bets(self):
         for bslot in self.bets.keys():
             self.bets[bslot] = 0
-
-    def tag_defeat(self, dealer_qualifies=True):
-        """
-        dealers does not qualify if dealer's hand is less than a pair!
-        when this happens, the ante bet is "pushed"
-        """
-        if not dealer_qualifies:
-            self._wealth += self.bets['ante']
-        self._reset_bets()
-        print('event money update - wealth:', self._wealth)
-        self.pev(MyEvTypes.MoneyUpdate, value=self._wealth)
 
     def resolve(self, pl_vhand, dealer_vhand):
         """
@@ -151,21 +137,48 @@ class WalletModel(kengi.Emitter):
         alors player récupère l’intégralité de ses mises de départ
         + ses enjeux seront récompensés en fct du tableau de paiement indiqué +haut
         """
-        pass
+        player_sc, dealer_sc = pl_vhand.value, dealer_vhand.value
 
-    def pay_for_victory(self, winner_vhand):
-        earnings = self.bets.copy()
+        if player_sc == dealer_sc:
+            result = 0
+        elif player_sc > dealer_sc:
+            result = 1
+        else:
+            result = -1
 
-        earnings['play'] += earnings['play']
-        earnings['ante'] += earnings['ante']
-        earnings['blind'] += WalletModel.comp_blind_payout(self.bets['blind'], winner_vhand)
+        # gere money aussi
+        if result == 1:
+            winner_vhand = pl_vhand
+            earnings = self.bets.copy()
+            earnings['play'] += earnings['play']
+            earnings['ante'] += earnings['ante']
+            earnings['blind'] += WalletModel.comp_blind_payout(self.bets['blind'], winner_vhand)
+            earnings['trips'] = WalletModel.comp_trips_payout(self.bets['trips'], winner_vhand)
+            reward = sum(tuple(earnings.values()))
+            self.delta_wealth = reward
+            self.prev_earnings = earnings
+            self._wealth += self.delta_wealth
+            self.pev(MyEvTypes.MoneyUpdate, value=self._wealth)
 
-        earnings['trips'] = WalletModel.comp_trips_payout(self.bets['trips'], winner_vhand)
+        return result
 
-        reward = sum(tuple(earnings.values()))
-        self.delta_wealth = reward
-        self.prev_earnings = earnings
-        self._wealth += self.delta_wealth
+        #     self.wallet.announce_tie()
+        #     self.result = 0
+        # elif dealrscore > playrscore:
+        #     self.wallet.tag_defeat(True)
+        #     self.result = -1
+        # else:  # victory
+        #     self.wallet.pay_for_victory(self.player_vhand)
+        #     self.result = 1
+
+    def impact_fold(self):
+        """
+        dealers does not qualify if dealer's hand is less than a pair!
+        when this happens, the ante bet is "pushed"
+        """
+        # if not dealer_qualifies:
+        #     self._wealth += self.bets['ante']
+        self._reset_bets()
         self.pev(MyEvTypes.MoneyUpdate, value=self._wealth)
 
     @staticmethod
@@ -230,11 +243,3 @@ class WalletModel(kengi.Emitter):
             'Straight Flush': 50
         }[givenhand.description]
         return multiplicateur
-
-    def notify_outcome(self):
-        if self.delta_wealth > 0:
-            self.pev(MyEvTypes.Victory, amount=self.delta_wealth)
-        elif self.delta_wealth == 0:
-            self.pev(MyEvTypes.Tie)
-        else:
-            self.pev(MyEvTypes.Defeat, loss=-1 * (self.ante + self.blind + self.playcost))

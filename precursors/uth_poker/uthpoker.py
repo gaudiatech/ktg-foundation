@@ -38,10 +38,12 @@ class PokerUth(kengi.GameTpl):
         self.m = None
 
     def enter(self, vms):
-        kengi.init(3)
+        kengi.init(2)
         self._manager = kengi.get_ev_manager()
         self._manager.setup(common.MyEvTypes)
         self.m = UthModel()
+        common.refmodel = self.m
+
         for liobj in (UthView(self.m), UthCtrl(self.m, self)):
             liobj.turn_on()
 

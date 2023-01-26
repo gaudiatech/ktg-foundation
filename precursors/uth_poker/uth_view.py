@@ -1,5 +1,5 @@
 import common
-from uth_model import UthModel
+from uth_model import UthModel, PokerStates
 
 
 kengi = common.kengi
@@ -26,7 +26,9 @@ CARD_SLOTS_POS = {  # coords in pixel -> where to place cards/chips
     'flop1': (238, 115),
     'river': (110 - 40, 115),
     'turn': (110, 115),
+}
 
+MONEY_POS = {
     'ante': (45, 166),
     'blind': (90, 166),
 
@@ -78,13 +80,13 @@ class UthView(kengi.EvListener):
             self.scrsize[1]//2
         ]
 
-    def on_chip_value_update(self, ev):
+    def on_chip_update(self, ev):
         print('[View] reception chipval update :::', ev.value)
         self.chip_adhoc_image = self.chip_spr[str(ev.value)].image
 
     def on_keydown(self, ev):
         omega = (2, 5, 10, 20)
-        curridx = omega.index(self._mod.chipvalue)
+        curridx = omega.index(self._mod.get_chipvalue())
         ch = False
 
         if ev.key == pygame.K_DOWN:
@@ -98,7 +100,7 @@ class UthView(kengi.EvListener):
 
         if ch:
             y = omega[curridx]
-            self._mod.set_curr_chipval(y)
+            self._mod.set_chipvalue(y)
 
     def _load_assets(self):
         self.bg = kengi.pygame.image.load(BACKGROUND_IMG_PATH)
@@ -135,18 +137,18 @@ class UthView(kengi.EvListener):
 
         self._assets_rdy = True
 
-    def on_stage_changes(self, ev):
-        if self._mod.stage == UthModel.BET0_PHASE:
-            self.info_msg0 = self.small_ft.render('Press ENTER to begin', False, self.TEXTCOLOR, self.BG_TEXTCOLOR)
+    def on_state_changes(self, ev):
+        if self._mod.stage == PokerStates.AnteSelection:
+            self.info_msg0 = self.small_ft.render('Press BACKSPACE to begin', False, self.TEXTCOLOR, self.BG_TEXTCOLOR)
             self.info_msg1 = None
             self.info_msg2 = None
         else:
             msg = None
-            if self._mod.stage == UthModel.PREFLOP_PHASE:
+            if self._mod.stage == PokerStates.PreFlop:
                 msg = ' CHECK, BET x3, BET x4'
-            elif self._mod.stage == UthModel.FLOP_PHASE:
+            elif self._mod.stage == PokerStates.Flop:
                 msg = ' CHECK, BET x2'
-            elif self._mod.stage == UthModel.TR_PHASE:
+            elif self._mod.stage == PokerStates.TurnRiver:
                 msg = ' FOLD, BET x1'
             if msg:
                 self.info_msg0 = self.small_ft.render(self.ASK_SELECTION_MSG, False, self.TEXTCOLOR, self.BG_TEXTCOLOR)
@@ -154,7 +156,7 @@ class UthView(kengi.EvListener):
             # TODO display the amount lost
 
     def on_mousedown(self, ev):
-        self._mod.stake_chip()
+        self._mod.wallet.stake_chip()
 
     def on_money_update(self, ev):  # , fvalue=None):  # RE-draw cash value
         # x = self._mod.chipvalue
@@ -212,49 +214,24 @@ class UthView(kengi.EvListener):
         cardback = self._my_assets['card_back']
 
         # ---------- draw chip value if the phase is still "setante"
-        if self._mod.stage == UthModel.SETANTE_PHASE:
+        if self._mod.stage == PokerStates.AnteSelection:
             target_pt = (
                 self.midscreen_pt[0],
                 self.midscreen_pt[1] + 100
             )
             UthView.centerblit(refscr, self.chip_adhoc_image, target_pt)
 
-            refscr.blit(self.ante_etq, CARD_SLOTS_POS['ante'])
-            refscr.blit(self.blind_etq, CARD_SLOTS_POS['blind'])
+            refscr.blit(self.ante_etq, MONEY_POS['ante'])
+            refscr.blit(self.blind_etq, MONEY_POS['blind'])
 
-        # ---------- draw visible or hidden cards ---------
-        if self._mod.stage == UthModel.BET0_PHASE:
-            # draw hidden cards' back, at adhoc location
-            for loc in ('dealer1', 'dealer2', 'player1', 'player2'):
-                UthView.centerblit(refscr, cardback, CARD_SLOTS_POS[loc])
-
-        if self._mod.stage > UthModel.BET0_PHASE:  # cards revealed
-            # draw hidden cards' back, at adhoc location
-            for k in range(1, 3 + 1):
-                UthView.centerblit(refscr, cardback, CARD_SLOTS_POS['flop' + str(k)])
-
-            for loc in ('dealer1', 'dealer2'):
-                UthView.centerblit(refscr, cardback, CARD_SLOTS_POS[loc])
-            for k, c in enumerate(self._mod.player_hand):
-                slotname = 'player' + str(k + 1)
-                UthView.centerblit(refscr, self._my_assets[c.code], CARD_SLOTS_POS[slotname])
-
-        if self._mod.stage >= UthModel.FLOP_PHASE:
-            # draw hidden cards' back, at adhoc location
-            for loc in ('turn', 'river'):
-                UthView.centerblit(refscr, cardback, CARD_SLOTS_POS[loc])
-            for k, c in enumerate(self._mod.flop_cards):
-                slotname = 'flop' + str(k + 1)
-                UthView.centerblit(refscr, self._my_assets[c.code], CARD_SLOTS_POS[slotname])
-
-        if self._mod.stage >= UthModel.TR_PHASE:
-            UthView.centerblit(refscr, self._my_assets[self._mod.turnriver_cards[0].code], CARD_SLOTS_POS['turn'])
-            UthView.centerblit(refscr, self._my_assets[self._mod.turnriver_cards[1].code], CARD_SLOTS_POS['river'])
-
-        if self._mod.revealed['dealer1'] and self._mod.revealed['dealer2']:
-            # show what the dealer has
-            UthView.centerblit(refscr, self._my_assets[self._mod.dealer_hand[0].code], CARD_SLOTS_POS['dealer1'])
-            UthView.centerblit(refscr, self._my_assets[self._mod.dealer_hand[1].code], CARD_SLOTS_POS['dealer2'])
+        if self._mod.stage != PokerStates.AnteSelection:  # draw all cards, unless the state is AnteSelection
+            for loc in CARD_SLOTS_POS.keys():
+                if self._mod.visibility[loc]:
+                    desc = self._mod.get_card_code(loc)
+                    x = self._my_assets[desc]
+                else:
+                    x = cardback
+                UthView.centerblit(refscr, x, CARD_SLOTS_POS[loc])
 
         # -- draw amounts for ante, blind and the bet
         # for info_e in self._mod.money_info:

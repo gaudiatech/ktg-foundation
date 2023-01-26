@@ -18,12 +18,14 @@ class ExtComponent(DynComponent):
 dyncomp = DynComponent()
 kengi = dyncomp.provide_kengi()
 MyEvTypes = kengi.game_events_enum((
-    'ChipValueUpdate',  # contains "value"
     'NewMatch',
 
-    'MoneyUpdate',  # contains int "value"
-    'StageChanges',
+    'MoneyUpdate',  # contains: ante, bet, play, trips, wealth
+    'ChipUpdate',  # contains: value
+
+    'StateChanges',  # contains: pokerstate
     'EndRoundRequested',
+
     'Victory',  # contains: amount
     'Tie',
     'Defeat'  # contains: loss

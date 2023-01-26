@@ -2,6 +2,7 @@
 import common
 import time
 
+from uth_poker.uth_model import PokerStates
 
 kengi = common.kengi
 
@@ -36,12 +37,15 @@ class UthCtrl(kengi.EvListener):
         # backspace will be used to CHECK / FOLD
         elif ev.key == kengi.pygame.K_BACKSPACE:
             print('[Ctrl] - player check')
-            self._mod.select_check()
+            self._mod.goto_next_state()
 
         # enter will be used to select the regular BET option, x3, x2 or x1 depends on the stage
         elif ev.key == kengi.pygame.K_RETURN:
-            print('[Ctrl] - player regular bet')
-            self._mod.select_bet(0)
+            # print('[Ctrl] - player regular bet')
+            if self._mod.stage != PokerStates.AnteSelection:
+            #     self._mod.goto_next_state()
+            # else:
+                self._mod.select_bet()
 
         # case: at the beginning of the game the player can select the MEGA-BET x4 lets use space for that
         # we'll also use space to begin the game. State transition: init -> discov

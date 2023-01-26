@@ -76,13 +76,15 @@ class UthView(kengi.EvListener):
 
         self.scrsize = kengi.get_surface().get_size()
 
-        unstake_button = kengi.gui.Button2(None, 'Start', (330, 128))
+        begin_button = kengi.gui.Button2(None, 'Start', (330, 128))
+        def cbbegin():
+            kengi.get_ev_manager().post(MyEvTypes.MatchStart)
+        begin_button.set_callback(cbbegin)
 
         # --- cycle right button
         cycle_r_button = kengi.gui.Button2(None, '>', (133, 266))
 
         def cb0():
-            print('cb0')
             kengi.get_ev_manager().post(MyEvTypes.ChipCycle, upwards=True)
 
         cycle_r_button.set_callback(cb0)
@@ -90,15 +92,19 @@ class UthView(kengi.EvListener):
         # --- cycle left button
         cycle_l_button = kengi.gui.Button2(None, '<', (133-80, 266))
         def cb1():
-            print(cb1)
             kengi.get_ev_manager().post(MyEvTypes.ChipCycle, upwards=False)
 
         cycle_l_button.set_callback(cb1)
 
         # ---
         stake_button = kengi.gui.Button2(None, ' ... ', (133-40, 266))
+        def cb2():
+            kengi.get_ev_manager().post(MyEvTypes.AddChips, upwards=False)
+        stake_button.set_callback(cb2)
+
+        # TODO the unstake chips button to cancel
         self.all_buttons = [
-            unstake_button,
+            begin_button,
             cycle_r_button,
             cycle_l_button,
             stake_button
@@ -175,9 +181,8 @@ class UthView(kengi.EvListener):
                 self.info_msg1 = self.small_ft.render(msg, False, self.TEXTCOLOR, self.BG_TEXTCOLOR)
             # TODO display the amount lost
 
-    # def on_mousedown(self, ev):
-    #     if self._mod.stage == PokerStates.AnteSelection:
-    #         self._mod.wallet.stake_chip()
+    def on_add_chips(self, ev):
+        self._mod.wallet.stake_chip()
 
     def on_money_update(self, ev):  # , fvalue=None):  # RE-draw cash value
         self._refresh_money_labels()
@@ -236,6 +241,7 @@ class UthView(kengi.EvListener):
         refscr.blit(surf, (p[0] - w // 2, p[1] - h // 2))
 
     def _paint(self, refscr):
+        refscr.fill('darkgreen')
         refscr.blit(self.bg, (0, 0))
         cardback = self._my_assets['card_back']
 

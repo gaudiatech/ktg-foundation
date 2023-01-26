@@ -42,6 +42,8 @@ dyncomp = DynComponent()
 kengi = dyncomp.provide_kengi()
 MyEvTypes = kengi.game_events_enum((
     'ChipCycle',  # contains: upwards(1,0) when going from 2->5->10->... etc or the other way around ; chips value
+    'AddChips',  # used to bet in an incremental way
+    'MatchStart',  # litteraly clicking on the Start button... when in AnteSelection stage
 
     'NewMatch',
 

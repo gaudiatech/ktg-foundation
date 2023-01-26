@@ -36,6 +36,9 @@ class UthCtrl(kengi.EvListener):
         else:
             common.chip_scrolldown(chval)
 
+    def on_match_start(self, ev):
+        self._mod.check()
+
     def on_keydown(self, ev):
         if ev.key == kengi.pygame.K_ESCAPE:
             self.refgame.gameover = True
@@ -47,7 +50,7 @@ class UthCtrl(kengi.EvListener):
             elif ev.key == kengi.pygame.K_UP:
                 self.pev(MyEvTypes.ChipCycle, upwards=True)
             elif ev.key == kengi.pygame.K_BACKSPACE:
-                self._mod.check()
+                self.pev(MyEvTypes.MatchStart)
             return
 
         if not self._mod.match_over:

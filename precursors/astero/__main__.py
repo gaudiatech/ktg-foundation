@@ -18,6 +18,7 @@ NEXT_GAME_LOADED = 'niobepolis'  # 'main1'
 BG_COLOR = (0, 25, 0)
 SHIP_COLOR = (119, 255, 0)
 BULLET_COLOR = SHIP_COLOR
+
 NB_ROCKS = 3
 
 pygame = kengi.pygame

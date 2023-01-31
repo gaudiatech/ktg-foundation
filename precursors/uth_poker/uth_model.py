@@ -8,13 +8,7 @@ kengi = common.kengi
 CardDeck = kengi.tabletop.CardDeck
 find_best_ph = kengi.tabletop.find_best_ph
 
-PokerStates = kengi.struct.enum(
-    'AnteSelection',
-    'PreFlop',
-    'Flop',
-    'TurnRiver',
-    'Outcome'
-)
+PokerStates = common.PokerStates
 
 
 class UthModel(kengi.Emitter):
@@ -162,6 +156,10 @@ class UthModel(kengi.Emitter):
     def _goto_next_state(self):
         """
         iterate the game (pure game logic)
+
+        !! for a much cleaner structure, this should be done via
+         --- a set of (GameStates, controller) pairs ---
+        TODO refactoring Uth
         """
         if self._pokerstate is None:
             self.init_new_round()

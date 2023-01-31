@@ -76,6 +76,9 @@ class UthCtrl(kengi.EvListener):
             # force a new round!
             self._mod.reboot_match()
 
+    def on_clear_bet(self, ev):
+        self._mod.wallet.unstake_all()
+
     def on_rien_ne_va_plus(self, ev):
         self.autoplay = True
         self.elapsed_t = 0

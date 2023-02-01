@@ -1,3 +1,11 @@
+"""
+Using pairs of (dedicated_controller, specific_gamestate)
+is a nice way to ease state transition in this Poker game
+
+Hence we define every game state in the most explicit manner, BUT we keep
+the same model & the same view obj ALL ALONG, when transitioning...
+"""
+
 import common
 from uth_poker.uth_model import PokerStates
 
@@ -6,7 +14,92 @@ kengi = common.kengi
 MyEvTypes = common.MyEvTypes
 
 
-class UthCtrl(kengi.EvListener):
+# --------------------------------------------
+class AnteSelectionCtrl(kengi.EvListener):
+    """
+    selecting the amount to bet
+    """
+    def __init__(self, ref_m, ref_v):
+        super().__init__()
+
+    def on_mousedown(self):
+        pass
+
+
+class AnteSelectionState(kengi.BaseGameState):
+
+    def enter(self):
+        pass
+
+    def release(self):
+        pass
+
+
+# --------------------------------------------
+class PreFlopCtrl(kengi.EvListener):
+    """
+    selecting the amount to bet
+    """
+    def __init__(self, ref_m, ref_v):
+        super().__init__()
+
+    def on_mousedown(self):
+        pass
+
+
+class PreFlopState(kengi.BaseGameState):
+
+    def enter(self):
+        pass
+
+    def release(self):
+        pass
+
+
+# --------------------------------------------
+class FlopCtrl(kengi.EvListener):
+    pass
+
+
+class FlopState(kengi.BaseGameState):
+
+    def enter(self):
+        pass
+
+    def release(self):
+        pass
+
+
+# --------------------------------------------
+class TurnRiverCtrl(kengi.EvListener):
+    pass
+
+
+class TurnRiverState(kengi.BaseGameState):
+
+    def enter(self):
+        pass
+
+    def release(self):
+        pass
+
+
+# --------------------------------------------
+class OutcomeCtrl(kengi.EvListener):
+    pass
+
+
+class OutcomeState(kengi.BaseGameState):
+
+    def enter(self):
+        pass
+
+    def release(self):
+        pass
+
+
+# --------------------------------------------
+class DefaultCtrl(kengi.EvListener):
     """
     rq: c'est le controlleur qui doit "dérouler" la partie en fonction du temps,
     lorsque le joueur a bet ou bien qu'il s'est couché au Turn&River

@@ -17,7 +17,7 @@ you can either: Fold / Bet 1x the ante. You cannot check anymore since the river
 import time
 
 import common
-from uth_ctrl import UthCtrl
+from game_logic import DefaultCtrl, AnteSelectionState, PreFlopState, FlopState, TurnRiverState, OutcomeState
 from uth_model import UthModel
 from uth_view import UthView
 
@@ -31,59 +31,9 @@ WARP_BACK = [2, 'niobepolis']
 CARD_SIZE_PX = (69, 101)
 
 
-# -----------------
-# to ease state transition
-class AnteSelectionSt(kengi.BaseGameState):
-
-    def enter(self):
-        pass
-
-    def release(self):
-        pass
-
-
-class PreFlopSt(kengi.BaseGameState):
-
-    def enter(self):
-        pass
-
-    def release(self):
-        pass
-
-
-class FlopSt(kengi.BaseGameState):
-
-    def enter(self):
-        pass
-
-    def release(self):
-        pass
-
-
-class TurnRiverSt(kengi.BaseGameState):
-
-    def enter(self):
-        pass
-
-    def release(self):
-        pass
-
-
-class OutcomeSt(kengi.BaseGameState):
-
-    def enter(self):
-        pass
-
-    def release(self):
-        pass
-
-
-# --------------------------
-#  modelizes the whole game!
-# --------------------------
 class PokerUth(kengi.GameTpl):
     """
-    represents the Game as a whole
+    rodelizes the whole game!
     """
 
     def __init__(self):
@@ -99,20 +49,19 @@ class PokerUth(kengi.GameTpl):
         kengi.declare_game_states(
             common.PokerStates,
             {
-                common.PokerStates.AnteSelection: AnteSelectionSt,
-                common.PokerStates.PreFlop: PreFlopSt,
-                common.PokerStates.Flop: FlopSt,
-                common.PokerStates.TurnRiver: TurnRiverSt,
-                common.PokerStates.Outcome: OutcomeSt
+                common.PokerStates.AnteSelection: AnteSelectionState,
+                common.PokerStates.PreFlop: PreFlopState,
+                common.PokerStates.Flop: FlopState,
+                common.PokerStates.TurnRiver: TurnRiverState,
+                common.PokerStates.Outcome: OutcomeState
             }
         )
-
         self.m = UthModel()
         common.refmodel = self.m
         self.v = UthView(self.m)
         common.refview = self.v
 
-        for liobj in (self.v, UthCtrl(self.m, self)):
+        for liobj in (self.v, DefaultCtrl(self.m, self)):
             liobj.turn_on()
 
     def update(self, infot):

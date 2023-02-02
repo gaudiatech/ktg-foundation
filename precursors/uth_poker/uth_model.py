@@ -178,12 +178,18 @@ class UthModel(kengi.Emitter):
         }
         self._pokerstate = tr_table[self._pokerstate]
 
-        if self._pokerstate is None:
-            return False
-        else:
-            self._proc_state(self._pokerstate)  # what actions are needed to update the model?
-            self.pev(MyEvTypes.StateChanges, pokerstate=self._pokerstate)
-            return True
+        # since February, the model should not decide what game state we are in,
+        # let controllers do this job !
+        # TODO finish the refactoring
+        # - specific update of the model !!!
+        self._proc_state(self._pokerstate)  # these actions should probably be moved to specific controllers
+
+        # if self._pokerstate is None:
+        #     return False
+        # else:
+        #        ........... _proc_state ...........  # describe &exec what actions are needed to update the model
+        #     self.pev(MyEvTypes.StateChanges, pokerstate=self._pokerstate)
+        #     return True
 
     def check(self):
         self._goto_next_state()

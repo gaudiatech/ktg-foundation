@@ -8,8 +8,8 @@ kengi.bootstrap_e()
 #         import katagames_engine as _kengi
 #         _kengi.bootstrap_e()
 #         return _kengi
-#
-#
+
+
 # class ExtComponent(DynComponent):
 #     def provide_kengi(self):
 #         import katagames_sdk as katasdk
@@ -17,7 +17,7 @@ kengi.bootstrap_e()
 #         return katasdk.kengi
 
 
-refmodel, refview = None, None
+refgame, refmodel, refview = None, None, None
 
 
 def chip_scrolldown(x):
@@ -49,20 +49,23 @@ PokerStates = kengi.struct.enum(
 )
 
 MyEvTypes = kengi.game_events_enum((
-    'ChipCycle',  # contains: upwards(1,0) when going from 2->5->10->... etc or the other way around ; chips value
-    'AddChips',  # used to bet in an incremental way
-    'MatchStart',  # litteraly clicking on the Start button... when in AnteSelection stage
+    'StackChip',  # used to bet in an incremental way
+    'CycleChipval',  # contains: upwards(int: 1 or 0), to answer 'do we cycle 2->5->10->... or the other way around?'
 
-    # - buttons
-    'BetSame',
-    'UndoBet',
-    'ClearBet',
+    # - IMPACT from buttons in AnteSelectionState
+    'DealCards',  # this litteraly means ->clicking the Start button... In AnteSelection stage
+    'BetIdem',
+    'BetUndo',
+    'BetReset',
+
+    # - IMPACT from buttons (generic)
+    'BetDecision',
+    'BetHighDecision',  # can be sent only from the PreFlopState
+    'CheckDecision',  # can also represent a FOLD operation (at the TurnRiverState)
 
     'NewMatch',
-
     'MoneyUpdate',  # contains: ante, bet, play, trips, wealth
     'ChipUpdate',  # contains: value
-
     'StateChanges',  # contains: pokerstate
     'RienNeVaPlus',  # sent when player has chosen bet or fold
     'MatchOver',  # contains: won(-1, 0, +1)

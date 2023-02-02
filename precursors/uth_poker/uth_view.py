@@ -1,7 +1,6 @@
 import common
 from uth_model import PokerStates
 
-
 # aliases
 kengi = common.kengi
 pygame = kengi.pygame
@@ -58,28 +57,28 @@ class UthView(kengi.EvListener):
             'cash_etq': kengi.gui.Label((0, 0), 'cash', 22)
         }
         return wContainer(
-            (32, self.midpt[1]+66),
+            (32, self.midpt[1] + 66),
             (128, 128),
             wContainer.FLOW,
             all_lbl,
             spacing=2
         )
 
-    def _build_chips_related_gui(self):
+    def _build_chips_related_gui(self):  # TODO group with other obj so we have 1 panel dedicated to AnteSelection
         # -----------------
         # --- cycle right button
         def cb0():
-            kengi.get_ev_manager().post(MyEvTypes.ChipCycle, upwards=True)
+            kengi.get_ev_manager().post(MyEvTypes.CycleChipval, upwards=True)
 
         cycle_r_button = kengi.gui.Button2(None, '>', (133, 266), callback=cb0)
 
         # --- cycle left button
         def cb1():
-            kengi.get_ev_manager().post(MyEvTypes.ChipCycle, upwards=False)
+            kengi.get_ev_manager().post(MyEvTypes.CycleChipval, upwards=False)
 
         cycle_l_button = kengi.gui.Button2(None, '<', (133 - 80, 266), callback=cb1)
 
-        stake_button = kengi.gui.Button2(None, ' __+__ ', (133 - 40, 266), tevent=MyEvTypes.AddChips)
+        stake_button = kengi.gui.Button2(None, ' __+__ ', (133 - 40, 266), tevent=MyEvTypes.StackChip)
         # -----------------
 
         chip_related_buttons = [
@@ -87,10 +86,12 @@ class UthView(kengi.EvListener):
             stake_button,
             cycle_r_button,
         ]
+        # for b in chip_related_buttons:
+        #    b.set_active()
 
         targ_w = 140
         return wContainer(
-            (self.midpt[0] - (targ_w// 2), self.midpt[1] + 132),
+            (self.midpt[0] - (targ_w // 2), self.midpt[1] + 132),
             (targ_w, 32),
             wContainer.EXPAND,
             chip_related_buttons, spacing=8
@@ -99,11 +100,15 @@ class UthView(kengi.EvListener):
     @staticmethod
     def _init_actions_related_gui():
         all_bt = [
-            kengi.gui.Button2(None, 'Deal', (330, 128), tevent=MyEvTypes.MatchStart),
-            kengi.gui.Button2(None, 'BetSame', (0, 11), tevent=MyEvTypes.BetSame),
-            kengi.gui.Button2(None, 'Cancel', (0, 0), tevent=MyEvTypes.UndoBet),
-            kengi.gui.Button2(None, 'Clear', (0, 0), tevent=MyEvTypes.ClearBet),
+            kengi.gui.Button2(None, 'BetSame', (0, 11), tevent=MyEvTypes.BetIdem),  # bet same action is Bt #0
+
+            kengi.gui.Button2(None, 'Deal', (330, 128), tevent=MyEvTypes.DealCards),
+            kengi.gui.Button2(None, 'Cancel', (0, 0), tevent=MyEvTypes.BetUndo),
+            kengi.gui.Button2(None, 'Clear', (0, 0), tevent=MyEvTypes.BetReset),
         ]
+        # for b in all_bt:
+        #     b.set_active()
+
         return wContainer(
             (320, 244), (133, 250), wContainer.FLOW, all_bt, spacing=16
         )
@@ -136,7 +141,6 @@ class UthView(kengi.EvListener):
 
         self._money_labels = self._init_money_labels()
         self._money_labels.set_debug_flag()
-        self.on_money_update(None)  # force update
 
         self.act_deal_cards = None
         self.act_undo_stake = None
@@ -145,19 +149,52 @@ class UthView(kengi.EvListener):
         self._act_related_wcontainer = self._init_actions_related_gui()
         self._act_related_wcontainer.set_debug_flag()  # pr affichage forcé
 
-    def turn_on(self):
-        super().turn_on()
-        for b in self._chips_related_wcontainer.content:
-            b.turn_on()
-        for b in self._act_related_wcontainer.content:
-            b.turn_on()
+        self.generic_wcontainer = wContainer(
+            (320, 244), (133, 250), wContainer.FLOW,
+            [
+                kengi.gui.Button2(None, 'Bet x4', (0, 0), tevent=MyEvTypes.BetHighDecision),
+                kengi.gui.Button2(None, 'Bet x3', (0, 0), tevent=MyEvTypes.BetDecision),
+                kengi.gui.Button2(None, 'Check', (0, 0), tevent=MyEvTypes.CheckDecision)
+            ],
+            spacing=16
+        )
 
-    def turn_off(self):
-        super().turn_off()
-        for b in self._chips_related_wcontainer.content:
-            b.turn_off()
-        for b in self._act_related_wcontainer.content:
-            b.turn_off()
+        self.on_money_update(None)  # force a 1st money update
+
+    def show_anteselection(self):
+        # ensure everything is reset
+        self._chips_related_wcontainer.set_active()
+
+        self._act_related_wcontainer.set_active()
+        self._act_related_wcontainer.content[0].set_enabled(False)
+        self._act_related_wcontainer.content[1].set_enabled(False)
+        self._act_related_wcontainer.content[2].set_enabled(False)
+        self._act_related_wcontainer.content[3].set_enabled(False)
+
+    def hide_anteselection(self):
+        self._chips_related_wcontainer.set_active(False)
+        self._act_related_wcontainer.set_active(False)
+
+    def show_generic_gui(self):
+        self.generic_wcontainer.set_active()
+        # For extra- practicity, add custom getters to the object WidgetContainer that we use
+        self.generic_wcontainer.bethigh_button = self.generic_wcontainer.content[0]
+        self.generic_wcontainer.bet_button = self.generic_wcontainer.content[1]
+        self.generic_wcontainer.check_button = self.generic_wcontainer.content[2]
+
+    # def turn_on(self):
+    #     super().turn_on()
+    #     for b in self._chips_related_wcontainer.content:
+    #         b.turn_on()
+    #     for b in self._act_related_wcontainer.content:
+    #         b.turn_on()
+
+    # def turn_off(self):
+    #     super().turn_off()
+    #     for b in self._chips_related_wcontainer.content:
+    #         b.turn_off()
+    #     for b in self._act_related_wcontainer.content:
+    #         b.turn_off()
 
     def on_chip_update(self, ev):
         print('[View] reception chipval update :::', ev.value)
@@ -195,35 +232,17 @@ class UthView(kengi.EvListener):
             self.chip_spr['2' if chip_val_info in ('2a', '2b') else chip_val_info] = spr
 
         self.chip_adhoc_image = self.chip_spr['2'].image
-
         self._assets_rdy = True
 
-    def on_state_changes(self, ev):
-        if self._mod.stage == PokerStates.AnteSelection:
-            self.info_msg0 = self.small_ft.render('Press BACKSPACE to begin', False, self.TEXTCOLOR, self.BG_TEXTCOLOR)
-            self.info_msg1 = None
-            self.info_msg2 = None
-        else:
-            msg = None
-            if self._mod.stage == PokerStates.PreFlop:
-                msg = ' CHECK, BET x3, BET x4'
-            elif self._mod.stage == PokerStates.Flop:
-                msg = ' CHECK, BET x2'
-            elif self._mod.stage == PokerStates.TurnRiver:
-                msg = ' FOLD, BET x1'
-            if msg:
-                self.info_msg0 = self.small_ft.render(self.ASK_SELECTION_MSG, False, self.TEXTCOLOR, self.BG_TEXTCOLOR)
-                self.info_msg1 = self.small_ft.render(msg, False, self.TEXTCOLOR, self.BG_TEXTCOLOR)
-            # TODO display the amount lost
-
-    def on_add_chips(self, ev):
-        self._mod.wallet.stake_chip()
-
-    def on_money_update(self, ev):  # , fvalue=None):  # RE-draw cash value
+    def on_money_update(self, ev):
+        if self._act_related_wcontainer.active:
+            bv = self._mod.wallet.bets['ante'] > 0
+            for i in range(1, 4):
+                self._act_related_wcontainer.content[i].set_enabled(bv)  # all buttons except BetIdem
         self._refresh_money_labels()
 
-    def on_new_match(self, ev):
-        self._refresh_money_labels()
+    # def on_new_match(self, ev):
+    #     self._refresh_money_labels()
 
     def _refresh_money_labels(self):
         x = self._mod.get_balance()
@@ -314,7 +333,9 @@ class UthView(kengi.EvListener):
             etq.draw()  # get_pos()
         # refscr.blit(self._money_labels['ante_etq'].image, MONEY_POS['ante'])
         # refscr.blit(self._money_labels['blind_etq'].image, MONEY_POS['blind'])
-        # refscr.blit(self._money_labels['cash_etq'].image, (self.scrsize[0] + OFFSET_CASH[0], self.scrsize[1] + OFFSET_CASH[1]))
+        # refscr.blit(
+        #   self._money_labels['cash_etq'].image, (self.scrsize[0] + OFFSET_CASH[0], self.scrsize[1] + OFFSET_CASH[1])
+        # )
 
         # display all 3 prompt messages
         for rank, e in enumerate((self.info_msg0, self.info_msg1, self.info_msg2)):
@@ -322,8 +343,9 @@ class UthView(kengi.EvListener):
                 refscr.blit(e, (24, 10 + 50 * rank))
 
         self._chips_related_wcontainer.draw()
-        self._act_related_wcontainer.draw()
         self._money_labels.draw()
+        self._act_related_wcontainer.draw()
+        self.generic_wcontainer.draw()  # will be drawn or no, depending on if its active!
 
     def on_paint(self, ev):
         if not self._assets_rdy:

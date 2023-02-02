@@ -15,9 +15,8 @@ without you having any further betting options)
 you can either: Fold / Bet 1x the ante. You cannot check anymore since the river is out.
 """
 import time
-
 import common
-from game_logic import DefaultCtrl, AnteSelectionState, PreFlopState, FlopState, TurnRiverState, OutcomeState
+from game_logic import AnteSelectionState, PreFlopState, FlopState, TurnRiverState, OutcomeState
 from uth_model import UthModel
 from uth_view import UthView
 
@@ -42,7 +41,6 @@ class PokerUth(kengi.GameTpl):
         self.m = self.v = None
 
     def enter(self, vms=None):
-        kengi.init(2)
         self._manager = kengi.get_ev_manager()
         self._manager.setup(common.MyEvTypes)
 
@@ -58,29 +56,35 @@ class PokerUth(kengi.GameTpl):
         )
         self.m = UthModel()
         common.refmodel = self.m
+
         self.v = UthView(self.m)
         common.refview = self.v
+        self.v.turn_on()
 
-        for liobj in (self.v, DefaultCtrl(self.m, self)):
-            liobj.turn_on()
-
-    def update(self, infot):
-        super().update(infot)
-        if self.gameover:
-            return WARP_BACK
+    # def update(self, infot):
+    #     super().update(infot)
+    #     if self.gameover:
+    #         return WARP_BACK
 
 
 game_obj = PokerUth()
+common.refgame = game_obj
 # if not isinstance(common.dyncomp, common.DynComponent):  # only if katasdk is active
 #     katasdk.gkart_activation(game_obj)
 
 # -----------------
 # local ctx run
 if __name__ == '__main__':
-    game_obj.enter(None)
-    while not game_obj.gameover:
-        tmp = game_obj.update(time.time())
-        if tmp and tmp[0] == 2:
-            game_obj.gameover = True
-    game_obj.exit(None)
-    print('sortie clean')
+    kengi.init(2)
+
+    #
+    # - ok but this wont trigger GameStarts event
+    # ...
+    # game_obj.enter(None)  calls .enter()
+    # while not game_obj.gameover:
+    #     tmp = game_obj.update(time.time())
+    #     if tmp and tmp[0] == 2:
+    #         game_obj.gameover = True
+
+    game_obj.loop()
+    # game_obj.exit(None)

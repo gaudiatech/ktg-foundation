@@ -172,7 +172,9 @@ class UthView(kengi.EvListener):
         self._act_related_wcontainer.content[3].set_enabled(False)
 
     def hide_anteselection(self):
+        # if self._chips_related_wcontainer.active:
         self._chips_related_wcontainer.set_active(False)
+        # if self._act_related_wcontainer.active:
         self._act_related_wcontainer.set_active(False)
 
     def show_generic_gui(self):
@@ -181,6 +183,9 @@ class UthView(kengi.EvListener):
         self.generic_wcontainer.bethigh_button = self.generic_wcontainer.content[0]
         self.generic_wcontainer.bet_button = self.generic_wcontainer.content[1]
         self.generic_wcontainer.check_button = self.generic_wcontainer.content[2]
+
+    def hide_generic_gui(self):
+        self.generic_wcontainer.set_active(False)
 
     # def turn_on(self):
     #     super().turn_on()
@@ -265,12 +270,12 @@ class UthView(kengi.EvListener):
             )
         elif ev.won == 1:  # won indeed
             result = self._mod.quantify_reward()
-
             infoh_player = self._mod.player_vhand.description
             infoh_dealer = self._mod.dealer_vhand.description
             msg = f"Player: {infoh_player}; Dealer: {infoh_dealer}; Change {result}$"
             self.info_msg0 = self.small_ft.render('Victory!', False, self.TEXTCOLOR)
             self.info_msg1 = self.small_ft.render(msg, False, self.TEXTCOLOR)
+
         elif ev.won == -1:  # lost
             if self._mod.player_folded:
                 msg = 'Player folded.'
@@ -278,7 +283,6 @@ class UthView(kengi.EvListener):
                 msg = 'Defeat.'
             self.info_msg0 = self.small_ft.render(msg, True, self.TEXTCOLOR)
             result = self._mod.prev_total_bet
-
             if self._mod.player_folded:
                 self.info_msg1 = self.small_ft.render(f"You lost {result}$", False, self.TEXTCOLOR)
             else:
@@ -297,7 +301,10 @@ class UthView(kengi.EvListener):
 
     def _paint(self, refscr):
         refscr.fill('darkgreen')
+
+        # affiche mains du dealer +decor casino
         refscr.blit(self.bg, (0, 0))
+
         cardback = self._my_assets['card_back']
 
         # ---------- draw chip value if the phase is still "setante"
@@ -341,7 +348,6 @@ class UthView(kengi.EvListener):
         for rank, e in enumerate((self.info_msg0, self.info_msg1, self.info_msg2)):
             if e is not None:
                 refscr.blit(e, (24, 10 + 50 * rank))
-
         self._chips_related_wcontainer.draw()
         self._money_labels.draw()
         self._act_related_wcontainer.draw()

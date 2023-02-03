@@ -7,7 +7,7 @@ the same model & the same view obj ALL ALONG, when transitioning...
 """
 import common
 from uth_poker.uth_model import PokerStates
-
+from uth_poker.uth_view import UthView
 
 kengi = common.kengi
 MyEvTypes = common.MyEvTypes
@@ -18,7 +18,7 @@ class AnteSelectionCtrl(kengi.EvListener):
     """
     selecting the amount to bet
     """
-    def __init__(self, ref_m, ref_v):
+    def __init__(self, ref_m):
         super().__init__()
         self._mod = ref_m
         self.recent_date = None
@@ -27,9 +27,7 @@ class AnteSelectionCtrl(kengi.EvListener):
 
     def on_deal_cards(self, ev):
         self._mod.check()  # =>launch match
-
         self.pev(kengi.EngineEvTypes.StateChange, state_ident=PokerStates.PreFlop)
-
         # useful ??
         self.recent_date = None
         self.autoplay = False
@@ -59,10 +57,18 @@ class AnteSelectionState(kengi.BaseGameState):
         self.c = None
 
     def enter(self):
-        print('[AnteSelectionState] enter!')
+        # ensure "manually" that the model has the right state
+        common.refmodel._pokerstate = PokerStates.AnteSelection
 
+        # force the reset of the view, bc if its not the 1st match played, its state can be "non-eden"
+        # and thats not what we need
+        common.refview.turn_off()
+        common.refview = UthView(common.refmodel)
+        common.refview.turn_on()
+
+        print('[AnteSelectionState] enter!')
         common.refview.show_anteselection()
-        self.c = AnteSelectionCtrl(common.refmodel, common.refview)
+        self.c = AnteSelectionCtrl(common.refmodel)
         self.c.turn_on()
 
     def release(self):
@@ -88,9 +94,15 @@ class PreFlopCtrl(kengi.EvListener):
         self.m.check()
         self._iter_gstate()
 
+    # what button has been clicked? The one with x4 or the one with x3?
+    def on_bet_high_decision(self, ev):
+        print('Impact x4')
+        self.m.select_bet(bullish_choice=True)
+        self._iter_gstate()
+
     def on_bet_decision(self, ev):
-        # TODO what button has been clicked? The one with x4 or the one with x3?
-        self.m.select_bet(bullish_choice=False)
+        print('Impact x3')
+        self.m.select_bet()
         self._iter_gstate()
 
 
@@ -100,15 +112,15 @@ class PreFlopState(kengi.BaseGameState):
         self.c = None
 
     def enter(self):
+        print('ENTER preflop')
         common.refview.show_generic_gui()  # that part of Gui will stay active until bets are over
-
         self.c = PreFlopCtrl(common.refmodel)
         self.c.turn_on()
-        print('[PreFlopState] enter!')
 
     def release(self):
+        print('EXIT preflop')
         self.c.turn_off()
-        print('[PreFlopState] release!')
+        common.refview.hide_generic_gui()
 
 
 # TODo faut decouper ca et remettre des bouts dans les states/le model
@@ -140,8 +152,23 @@ class FlopCtrl(kengi.EvListener):
         super().__init__()
         self.m = ref_m
 
+    def _iter_gstate(self):
+        self.pev(kengi.EngineEvTypes.StateChange, state_ident=PokerStates.TurnRiver)
+
     def on_bet_decision(self, ev):
-        pass  # TODO
+        # TODO what button has been clicked? The one with x4 or the one with x3?
+        self.m.select_bet()
+        self._iter_gstate()
+
+    def on_check_decision(self, ev):
+        self.m.check()
+        self._iter_gstate()
+
+    def on_mousedown(self, ev):
+        if self.m.autoplay:
+            print('Zap')
+            self.pev(kengi.EngineEvTypes.StateChange, state_ident=PokerStates.TurnRiver)
+            self.m._goto_next_state()  # returns False if there's no next state
 
 
 class FlopState(kengi.BaseGameState):
@@ -150,14 +177,20 @@ class FlopState(kengi.BaseGameState):
         self.c = None
 
     def enter(self):
-        print('[FlopState] enter!')
-        common.refview.generic_wcontainer.bethigh_button.set_active(False)
+        print(' ENTER flop')
+        if not common.refmodel.autoplay:
+            common.refview.show_generic_gui()  # show it again!
+            widgetc = common.refview.generic_wcontainer
+            widgetc.bet_button.label = 'Bet x2'
+            widgetc.bethigh_button.set_active(False)
+
         self.c = FlopCtrl(common.refmodel)
         self.c.turn_on()
 
     def release(self):
+        print(' LEAVE flop')
         self.c.turn_off()
-        print('[FlopState] release!')
+        common.refview.hide_generic_gui()
 
 
 # --------------------------------------------
@@ -167,18 +200,48 @@ class TurnRiverCtrl(kengi.EvListener):
     """
     def __init__(self, ref_m, ref_v):
         super().__init__()
+        self.m = ref_m
 
-    def on_mousedown(self):
-        pass
+    def _iter_gstate(self):
+        self.pev(kengi.EngineEvTypes.StateChange, state_ident=PokerStates.Outcome)
+
+    def on_mousedown(self, ev):
+        if self.m.autoplay:
+            self.m._goto_next_state()  # returns False if there's no next state
+            self.pev(kengi.EngineEvTypes.StateChange, state_ident=PokerStates.Outcome)
+
+    def on_bet_decision(self, ev):
+        self.m.select_bet()
+        print('BET au TR')
+        self._iter_gstate()
+
+    def on_check_decision(self, ev):
+        self.m.fold()
+        print('un check au TR vaut pour Fold!!')
+        self._iter_gstate()
 
 
 class TurnRiverState(kengi.BaseGameState):
+    def __init__(self, ident):
+        super().__init__(ident)
+        self.c = None
 
     def enter(self):
-        pass
+        print(' ENTER turn-river st.')
+        if not common.refmodel.autoplay:
+            common.refview.show_generic_gui()
+            wcontainer = common.refview.generic_wcontainer
+            wcontainer.bethigh_button.set_active(False)
+            wcontainer.bet_button.label = 'Bet x1'
+            wcontainer.check_button.label = 'Fold'
+
+        self.c = TurnRiverCtrl(common.refmodel, None)
+        self.c.turn_on()
 
     def release(self):
-        pass
+        common.refview.hide_generic_gui()
+        print(' LEAVE turn-river st.')
+        self.c.turn_off()
 
 
 # --------------------------------------------
@@ -186,20 +249,30 @@ class OutcomeCtrl(kengi.EvListener):
     """
     selecting the amount to bet
     """
-    def __init__(self, ref_m, ref_v):
+    def __init__(self, ref_m):
         super().__init__()
+        self._mod = ref_m
 
-    def on_mousedown(self):
-        pass
+    def on_mousedown(self, ev):
+        if self._mod.match_over:
+            self.pev(kengi.EngineEvTypes.StateChange, state_ident=PokerStates.AnteSelection)
+            # force the new round!
+            self._mod.init_new_round()
 
 
 class OutcomeState(kengi.BaseGameState):
+    def __init__(self, ident):
+        super().__init__(ident)
+        self.c = None
 
     def enter(self):
-        pass
+        print(' ENTER outcome st.')
+        self.c = OutcomeCtrl(common.refmodel)
+        self.c.turn_on()
 
     def release(self):
-        pass
+        print(' LEAVE outcome st.')
+        self.c.turn_off()
 
 
 # --------------------------------------------

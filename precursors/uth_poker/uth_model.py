@@ -61,6 +61,10 @@ class UthModel(kengi.Emitter):
         self.possible_bet_factor = None  # will be [3, 4] then [2, ] then [1, ]
         self._goto_next_state()
 
+    @property
+    def autoplay(self):
+        return self.bet_done or self.player_folded
+
     def quantify_reward(self):
         return self.wallet.prev_earnings
 
@@ -163,11 +167,9 @@ class UthModel(kengi.Emitter):
         """
         if self._pokerstate is None:
             self.init_new_round()
-
         elif self._pokerstate == PokerStates.AnteSelection:
             self.prev_total_bet = sum(self.wallet.all_infos)
             print('total bet is... =', self.prev_total_bet)
-
         tr_table = {
             None: PokerStates.AnteSelection,
             PokerStates.AnteSelection: PokerStates.PreFlop,
@@ -196,10 +198,6 @@ class UthModel(kengi.Emitter):
 
     def fold(self):
         self.player_folded = True
-        self._goto_next_state()
-
-    def reboot_match(self):
-        self._pokerstate = None
         self._goto_next_state()
 
     @property

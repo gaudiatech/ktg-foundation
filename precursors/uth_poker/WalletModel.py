@@ -16,17 +16,6 @@ Four of a kind/Carré        -> 10:1
 Full/Main pleine            -> 3:1 (x3)
 Flush/Couleur               -> 3:2 (x1.5)
 Straight/Suite              -> 1:1
-
----------------
-the "Trips" bet
----------------
-Royal Flush/Quinte Royale   -> 50:1
-Straight Flush/Quinte       -> 40:1
-Four of a kind/Carré        -> 30:1
-Full/Main pleine            -> 8:1
-Flush/Couleur               -> 7:1
-Straight/Suite              -> 4:1
-Three of a kind/Brelan      -> 3:1
 """
 import common
 
@@ -183,10 +172,38 @@ class WalletModel(kengi.Emitter):
 
     @staticmethod
     def comp_trips_payout(x, winning_vhand):
-        return 0  # TODO fix
+        """
+        the "Trips" bet
+        ---------------
+        Royal Flush/Quinte Royale   -> 50:1
+        Straight Flush/Quinte       -> 40:1
+        Four of a kind/Carré        -> 30:1
+        Full/Main pleine            -> 8:1
+        Flush/Couleur               -> 7:1
+        Straight/Suite              -> 4:1
+        Three of a kind/Brelan      -> 3:1
+        :return: y
+        """
+        y = 0
+        if winning_vhand.is_trips():
+            y += 3*x
+        elif winning_vhand.is_straight():
+            y += 4*x
+        elif winning_vhand.is_flush():
+            y += 7*x
+        elif winning_vhand.is_full():
+            y += 8*x
+        elif winning_vhand.is_four_oak():
+            y += 30*x
+        elif winning_vhand.is_straight() and winning_vhand.is_flush():  # straight Flush
+            y += 40*x
+        elif winning_vhand.is_royal():
+            y += 50*x
+
+        return y
 
     @staticmethod
-    def comp_blind_payout(x, winning_vhand):
+    def comp_blind_payout(blindbet_val, winning_vhand):
         """
         Royal Flush/Quinte Royale   -> 500:1
         Straight Flush/Quinte       -> 50:1
@@ -199,7 +216,8 @@ class WalletModel(kengi.Emitter):
         :param winning_vhand:
         :return: what should be earned
         """
-        return x  # TODO fix
+        print(type(winning_vhand), id(winning_vhand))
+        return blindbet_val  # TODO fix
 
     # def win_impact(self):
     #     if self.recorded_outcome == 1:
@@ -214,7 +232,7 @@ class WalletModel(kengi.Emitter):
         useful method because someone may want to call .pev(EngineEvTypes.GAMEENDS) when player's broke
         :return: True/False
         """
-        return self._cash <= 0
+        return self._wealth <= 0
 
     # ---------------------
     #  the 4 methods below compute future gain/loss

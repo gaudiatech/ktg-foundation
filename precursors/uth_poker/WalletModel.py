@@ -7,15 +7,6 @@ the "Ante", et "Play" bets
 On double Play en cas de victoire (toujours), On double Ante,
 sauf si Ante a été "push" au préalable
 
----------------
-the "Blind" bet
----------------
-Royal Flush/Quinte Royale   -> 500:1
-Straight Flush/Quinte       -> 50:1
-Four of a kind/Carré        -> 10:1
-Full/Main pleine            -> 3:1 (x3)
-Flush/Couleur               -> 3:2 (x1.5)
-Straight/Suite              -> 1:1
 """
 import common
 
@@ -144,11 +135,13 @@ class WalletModel(kengi.Emitter):
             earnings['blind'] += WalletModel.comp_blind_payout(self.bets['blind'], winner_vhand)
             earnings['trips'] = WalletModel.comp_trips_payout(self.bets['trips'], winner_vhand)
             reward = sum(tuple(earnings.values()))
+            print('total reward=', reward)
+            print(earnings, '***')
+            print()
             self.delta_wealth = reward
             self.prev_earnings = earnings
             self._wealth += self.delta_wealth
             self.pev(MyEvTypes.MoneyUpdate, value=self._wealth)
-
         return result
 
         #     self.wallet.announce_tie()
@@ -185,39 +178,51 @@ class WalletModel(kengi.Emitter):
         :return: y
         """
         y = 0
-        if winning_vhand.is_trips():
-            y += 3*x
-        elif winning_vhand.is_straight():
-            y += 4*x
-        elif winning_vhand.is_flush():
-            y += 7*x
-        elif winning_vhand.is_full():
-            y += 8*x
-        elif winning_vhand.is_four_oak():
-            y += 30*x
+        if winning_vhand.is_royal():
+            y += 50*x
         elif winning_vhand.is_straight() and winning_vhand.is_flush():  # straight Flush
             y += 40*x
-        elif winning_vhand.is_royal():
-            y += 50*x
-
+        elif winning_vhand.is_four_oak():
+            y += 30*x
+        elif winning_vhand.is_full():
+            y += 8*x
+        elif winning_vhand.is_flush():
+            y += 7 * x
+        elif winning_vhand.is_straight():
+            y += 4*x
+        elif winning_vhand.is_trips():
+            y += 3*x
+        print('ajout p/r trips:', y)
         return y
 
     @staticmethod
-    def comp_blind_payout(blindbet_val, winning_vhand):
+    def comp_blind_payout(x, winning_vhand):
         """
+        ---------------
+        the "Blind" bet
+        ---------------
         Royal Flush/Quinte Royale   -> 500:1
         Straight Flush/Quinte       -> 50:1
         Four of a kind/Carré        -> 10:1
         Full/Main pleine            -> 3:1 (x3)
         Flush/Couleur               -> 3:2 (x1.5)
         Straight/Suite              -> 1:1
-
-        :param x: represents the blind bet
-        :param winning_vhand:
-        :return: what should be earned
         """
-        print(type(winning_vhand), id(winning_vhand))
-        return blindbet_val  # TODO fix
+        y = 0
+        if winning_vhand.is_royal():
+            y += 500*x
+        elif winning_vhand.is_straight() and winning_vhand.is_flush():  # straight Flush
+            y += 50*x
+        elif winning_vhand.is_four_oak():
+            y += 10*x
+        elif winning_vhand.is_full():
+            y += 3*x
+        elif winning_vhand.is_flush():
+            y += int(1.5*x)
+        if winning_vhand.is_straight():
+            y += x
+        print('ajour p/r blind:', y)
+        return y
 
     # def win_impact(self):
     #     if self.recorded_outcome == 1:

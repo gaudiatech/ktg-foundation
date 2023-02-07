@@ -1,17 +1,22 @@
 import math
 import random
 import time
-import katagames_sdk as katasdk
-katasdk.bootstrap()
-kengi = katasdk.kengi
+#import katagames_sdk as katasdk
+#katasdk.bootstrap()
+import katagames_engine as kengi
+kengi.bootstrap_e()
+# kengi = katasdk.kengi
+pygame = kengi.pygame
+print('evtype keydown--->', pygame.KEYDOWN)  # TODO pygame KEYDOWN should take the value from kengi
+
 
 # ---------------------------
-
 #  not a real game, this is used for debug/test purpose
 #  as it can tell whether
 #  the Niobe-polis WebApp works properly or not...
-
 # ---------------------------
+
+
 NEXT_GAME_LOADED = 'niobepolis'  # 'main1'
 
 # game constants
@@ -20,23 +25,22 @@ SHIP_COLOR = (119, 255, 0)
 BULLET_COLOR = SHIP_COLOR
 
 NB_ROCKS = 3
-
-pygame = kengi.pygame
-CogObject = kengi.event.CogObj
-EventReceiver = kengi.event.EventReceiver
-EngineEvTypes = kengi.event.EngineEvTypes
+CogObject = kengi.events.Emitter
+EventReceiver = kengi.EvListener
+EngineEvTypes = kengi.EngineEvTypes
 bullets = list()
 scr_size = [0, 0]
 music_snd = None
 view = ctrl = None
 Vector2 = pygame.math.Vector2
-MyEvTypes = kengi.event.enum_ev_types(
+MyEvTypes = kengi.game_events_enum((
     'PlayerChanges',  # contains: new_pos, angle
-)
+))
+
 update_func_sig = None
 lu_event = p_event = None
 clockk = pygame.time.Clock()
-CgmEvent = kengi.event.CgmEvent
+CgmEvent = kengi.events.KengiEv
 e_manager = None
 
 
@@ -60,9 +64,9 @@ class RockSprite(pygame.sprite.Sprite):
         if self.__class__.snd:
             pass
         else:
-            self.__class__.snd = snd_load('astero/myassets/explosion_002.wav')
+            self.__class__.snd = snd_load('myassets/explosion_002.wav')
             self.__class__.snd.set_volume(0.66)
-        self.image = img_load('astero/myassets/rock.png')
+        self.image = img_load('myassets/rock.png')
         self.image.set_colorkey((0xff, 0, 0xff))
         pos = [random.randint(0, scr_size[0] - 1), random.randint(0, scr_size[1] - 1)]
         self.rect = self.image.get_rect()
@@ -107,11 +111,12 @@ class ShipModel(CogObject):
 
     def __init__(self):
         super().__init__()
-        self.scr_size = kengi.core.get_screen().get_size()
+        self.scr_size = kengi.get_surface().get_size()
         rand_pos = (random.randint(0, self.scr_size[0] - 1), random.randint(0, self.scr_size[1] - 1))
         self._position = Vector2(*rand_pos)
         self._angle = 0
         self._speed = Vector2()
+        self.alive = False
 
     @property
     def pos(self):
@@ -183,9 +188,10 @@ class ShipModel(CogObject):
         self._commit_new_pos()
 
     def update(self, temps_passe):
-        self._position.x += temps_passe * self._speed.x
-        self._position.y += temps_passe * self._speed.y
-        self._commit_new_pos()
+        if self.alive:
+            self._position.x += temps_passe * self._speed.x
+            self._position.y += temps_passe * self._speed.y
+            self._commit_new_pos()
 
     def dash(self):
         tmp = Vector2()
@@ -209,8 +215,8 @@ class TinyWorldView(EventReceiver):
         self.curr_angle = ref_mod.get_orientation()
         self.ref_rocksm = rocksm
 
-    def proc_event(self, ev, source):
-        if ev.type == EngineEvTypes.PAINT:
+    def on_event(self, ev):
+        if ev.type == EngineEvTypes.Paint:
             ev.screen.fill(BG_COLOR)
             for rock_spr in self.ref_rocksm:
                 ev.screen.blit(rock_spr.image, rock_spr.rect.topleft)
@@ -261,9 +267,9 @@ class ShipCtrl(EventReceiver):
         self._ref_rocks = rocksm
         self.last_tick = None
 
-    def proc_event(self, ev, source):
+    def on_event(self, ev):
         global update_func_sig, music_snd
-        if ev.type == EngineEvTypes.LOGICUPDATE:
+        if ev.type == EngineEvTypes.Update:
             ba = pygame.key.get_pressed()
             if ba[pygame.K_UP]:
                 self._ref_ship.accel()
@@ -283,7 +289,6 @@ class ShipCtrl(EventReceiver):
             if len(self._ref_rocks) == 0:
                 # clean de-pop game
                 music_snd.stop()
-                kengi.event.EventManager.instance().hard_reset()
                 update_func_sig = [2, NEXT_GAME_LOADED]
                 # FOR THE 1ST arg:
                 # 2 means: go load another game (next arg is gametag)
@@ -315,7 +320,7 @@ class ShipCtrl(EventReceiver):
                 rbplus.sort(reverse=True)
                 while len(rbplus) > 0:
                     del bullets[rbplus.pop()]
-        elif ev.type == pygame.KEYDOWN:
+        elif ev.type == EngineEvTypes.Keydown:
             if ev.key == pygame.K_SPACE:
                 bullets.append(self._ref_ship.shoot())
 
@@ -336,35 +341,46 @@ gameover = False
 class IntroV(EventReceiver):
     def __init__(self):
         super().__init__()
-        self.img = img_load('astero/myassets/enter_start.png')
+        self.img = img_load('myassets/enter_start.png')
         self.dim = self.img.get_size()
         self.painting = True
 
-    def proc_event(self, ev, source):
-        global view, ctrl, music_snd, gameover
-
+    def on_event(self, ev):
+        global view, ctrl, music_snd, gameover, shipm
         if self.painting:
-            if ev.type == EngineEvTypes.PAINT:
+            if ev.type == EngineEvTypes.Paint:
                 ev.screen.fill((0, 0, 0))
                 ev.screen.blit(self.img, ((scr_size[0] - self.dim[0]) // 2, (scr_size[1] - self.dim[1]) // 2))
 
-            elif ev.type == pygame.KEYDOWN and ev.key == pygame.K_RETURN:
-                self.painting = False
-                print_mini_tutorial()
-                pygame.mixer.init()
-                music_snd = snd_load('astero/myassets/ndimensions-zik.ogg')
-                music_snd.set_volume(0.25)
-                music_snd.play(-1)
+            elif ev.type == EngineEvTypes.Keydown:
+                if ev.key == pygame.K_RETURN:
+                    self.painting = False
+                    shipm.alive = True
+                    print('keypress ENTER')
+                    print_mini_tutorial()
+                    pygame.mixer.init()
+                    music_snd = snd_load('myassets/ndimensions-zik.ogg')
+                    music_snd.set_volume(0.25)
+                    music_snd.play(-1)
+
+            elif ev.type == EngineEvTypes.Update:
+                pass
+            else:
+                print('???? -', ev.type)
 
         if ev.type == pygame.QUIT:
             gameover = True
 
+shipm = None
 
 def game_enter(vmstate=None):
-    global scr_size, view, ctrl, lu_event, p_event, e_manager
-    katasdk.set_mode('old_school')
-    e_manager = kengi.event.EventManager.instance()
-    scr_size[0], scr_size[1] = kengi.core.get_screen().get_size()
+    global scr_size, view, ctrl, lu_event, p_event, e_manager, shipm
+    # katasdk.set_mode('old_school')
+    kengi.init(2)
+    e_manager = kengi.get_ev_manager()
+    e_manager.setup(MyEvTypes)
+
+    scr_size[0], scr_size[1] = kengi.get_surface().get_size()
     introv = IntroV()
     shipm = ShipModel()
     li = [RockSprite() for _ in range(NB_ROCKS)]
@@ -373,29 +389,35 @@ def game_enter(vmstate=None):
     view.turn_on()
     ctrl.turn_on()
     introv.turn_on()
-    game_ctrl = kengi.core.get_game_ctrl()
+
+    game_ctrl = kengi.get_game_ctrl()
     game_ctrl.turn_on()
-    lu_event = CgmEvent(EngineEvTypes.LOGICUPDATE, curr_t=None)
-    p_event = CgmEvent(EngineEvTypes.PAINT, screen=kengi.core.get_screen())
+
+    # lu_event = CgmEvent(, curr_t=None)
+    # p_event = CgmEvent(EngineEvTypes.Paint, screen=kengi.get_surface())
+    # print(p_event.type)
 
 
 def game_update(t_info=None):
-    global lu_event, p_event, clockk, gameover, update_func_sig
+    global lu_event, p_event, clockk, gameover, update_func_sig, e_manager
     if t_info:
-        lu_event.curr_t = t_info
+        curr_t = t_info
     else:
-        lu_event.curr_t = time.time()
-    e_manager.post(lu_event)
-    e_manager.post(p_event)
+        curr_t = time.time()
+
+    e_manager.post(EngineEvTypes.Update, curr_t=curr_t)
+    e_manager.post(EngineEvTypes.Paint, screen=kengi.get_surface())
     e_manager.update()
+
     clockk.tick(60)  # doit faire kedal en web ctx
+
     if gameover:
         return [1, None]
     elif update_func_sig is not None:
         print('__________retour', update_func_sig)
         return update_func_sig
     kengi.flip()
-    
+
 
 def game_exit(vmstate=None):
     kengi.quit()
@@ -405,14 +427,12 @@ def game_exit(vmstate=None):
     print('asteroids2 demo.. OUT')
 
 
-# -------------- utilisation sans vm ---------------{debut}
-if __name__=='__main__':
+if __name__ == '__main__':
+    print('lancement jeu')
     gameover = False
     game_enter()
     while not gameover:
-        tmp = game_update(None)
-        if tmp is not None:
-            if tmp[0] == 1 or tmp[0] == 2:
-                gameover = True
+        retourupdate = game_update(time.time())
+        if retourupdate:
+            gameover = True
     game_exit()
-# -------------- utilisation sans vm ---------------{fin}

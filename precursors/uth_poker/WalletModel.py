@@ -124,11 +124,14 @@ class WalletModel(kengi.Emitter):
 
         self.prev_total_bet = sum(tuple(self.bets.values()))
         self.prev_victorious = 0
-
-        if player_sc == dealer_sc:
-            return 0
         if player_sc < dealer_sc:
             return -1
+
+        self.prev_victorious = 1
+        if player_sc == dealer_sc:
+            # give back bets
+            self.prev_earnings = sum(tuple(self.bets.values()))
+            return 0
 
         # gere money aussi
         winner_vhand = pl_vhand
@@ -144,7 +147,7 @@ class WalletModel(kengi.Emitter):
 
         self.prev_earnings = sum(tuple(earnings.values()))
         self.prev_gain = a+b+c+d
-        self.prev_victorious = 1
+
         # _wealth will be updated when player restarts
         # self.pev(MyEvTypes.MoneyUpdate, value=self._wealth)
         return 1

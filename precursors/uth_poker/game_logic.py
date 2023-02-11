@@ -256,6 +256,10 @@ class OutcomeCtrl(kengi.EvListener):
     def on_mousedown(self, ev):
         if self._mod.match_over:
             self.pev(kengi.EngineEvTypes.StateChange, state_ident=PokerStates.AnteSelection)
+
+            # COLLECT what was won
+            self._mod.wallet.collect_case_victory()
+
             # force the new round!
             self._mod.init_new_round()
 

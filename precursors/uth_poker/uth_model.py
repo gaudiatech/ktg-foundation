@@ -24,7 +24,7 @@ class UthModel(kengi.Emitter):
         self.match_over = False
         self.bet_done = False
         self.player_folded = False
-        self.prev_total_bet = 0
+
         self.result = None
 
         # ---------------
@@ -66,7 +66,7 @@ class UthModel(kengi.Emitter):
         return self.bet_done or self.player_folded
 
     def quantify_reward(self):
-        return self.wallet.prev_earnings
+        return self.wallet.prev_gain
 
     def get_card_code(self, info):
         """
@@ -149,6 +149,7 @@ class UthModel(kengi.Emitter):
             if self.player_folded:
                 self.result = -1
                 self.wallet.impact_fold()
+
             else:
                 self.dealer_vhand = find_best_ph(self.dealer_hand + self.flop_cards + self.turnriver_cards)
                 self.player_vhand = find_best_ph(self.player_hand + self.flop_cards + self.turnriver_cards)
@@ -167,9 +168,7 @@ class UthModel(kengi.Emitter):
         """
         if self._pokerstate is None:
             self.init_new_round()
-        elif self._pokerstate == PokerStates.AnteSelection:
-            self.prev_total_bet = sum(self.wallet.all_infos)
-            print('total bet is... =', self.prev_total_bet)
+
         tr_table = {
             None: PokerStates.AnteSelection,
             PokerStates.AnteSelection: PokerStates.PreFlop,

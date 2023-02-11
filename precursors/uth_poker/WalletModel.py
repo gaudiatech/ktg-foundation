@@ -27,6 +27,9 @@ class WalletModel(kengi.Emitter):
     def __init__(self, wealth):
         super().__init__()
         self._wealth = wealth
+        self.prev_victorious = 0
+        self.prev_total_bet = None
+
         # this value can be chosen by the player. Ideally this should be measured in CR,
         # as soon as the Uth game is active within the Ktg system
         self.__curr_chip_val = 2
@@ -119,39 +122,32 @@ class WalletModel(kengi.Emitter):
         """
         player_sc, dealer_sc = pl_vhand.value, dealer_vhand.value
 
+        self.prev_total_bet = sum(tuple(self.bets.values()))
+        self.prev_victorious = 0
+
         if player_sc == dealer_sc:
-            result = 0
-        elif player_sc > dealer_sc:
-            result = 1
-        else:
-            result = -1
+            return 0
+        if player_sc < dealer_sc:
+            return -1
 
         # gere money aussi
-        if result == 1:
-            winner_vhand = pl_vhand
-            earnings = self.bets.copy()
-            earnings['play'] += earnings['play']
-            earnings['ante'] += earnings['ante']
-            earnings['blind'] += WalletModel.comp_blind_payout(self.bets['blind'], winner_vhand)
-            earnings['trips'] = WalletModel.comp_trips_payout(self.bets['trips'], winner_vhand)
-            reward = sum(tuple(earnings.values()))
-            print('total reward=', reward)
-            print(earnings, '***')
-            print()
-            self.delta_wealth = reward
-            self.prev_earnings = earnings
-            self._wealth += self.delta_wealth
-            self.pev(MyEvTypes.MoneyUpdate, value=self._wealth)
-        return result
+        winner_vhand = pl_vhand
+        earnings = self.bets.copy()
+        a = earnings['play']
+        earnings['play'] += a
+        b = earnings['ante']
+        earnings['ante'] += b
+        c = WalletModel.comp_blind_payout(self.bets['blind'], winner_vhand)
+        earnings['blind'] += c
+        d = WalletModel.comp_trips_payout(self.bets['trips'], winner_vhand)
+        earnings['trips'] = d
 
-        #     self.wallet.announce_tie()
-        #     self.result = 0
-        # elif dealrscore > playrscore:
-        #     self.wallet.tag_defeat(True)
-        #     self.result = -1
-        # else:  # victory
-        #     self.wallet.pay_for_victory(self.player_vhand)
-        #     self.result = 1
+        self.prev_earnings = sum(tuple(earnings.values()))
+        self.prev_gain = a+b+c+d
+        self.prev_victorious = 1
+        # _wealth will be updated when player restarts
+        # self.pev(MyEvTypes.MoneyUpdate, value=self._wealth)
+        return 1
 
     def impact_fold(self):
         """
@@ -160,8 +156,16 @@ class WalletModel(kengi.Emitter):
         """
         # if not dealer_qualifies:
         #     self._wealth += self.bets['ante']
+        self.prev_total_bet = sum(tuple(self.bets.values()))
+        self.prev_victorious = 0
+
         self._reset_bets()
         self.pev(MyEvTypes.MoneyUpdate, value=self._wealth)
+
+    def collect_case_victory(self):
+        if self.prev_victorious:
+            self._wealth += self.prev_earnings
+            self.pev(MyEvTypes.MoneyUpdate, value=self._wealth)
 
     @staticmethod
     def comp_trips_payout(x, winning_vhand):

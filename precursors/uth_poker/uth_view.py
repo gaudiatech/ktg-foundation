@@ -29,7 +29,7 @@ MLABELS_POS = {
     'blind': (258, 215),
     'play': (231, 243),
 
-    'cash': (53, 275),
+    'cash': (10, 170),
 }
 
 CARD_SLOTS_POS = {  # coords in pixel -> where to place cards/chips
@@ -57,14 +57,15 @@ MONEY_POS = {
     'raise6': (986 / 3, 876 / 3)
 }
 PLAYER_CHIPS = {
-    '2a': (232, 280),  # the only cst value used rn
+    '2a': (238, 278),  # the only cst value used rn
 
     '2b': (905 / 2, 1000 / 2),
     '5': (985 / 2, 1000 / 2),
     '10': (1065 / 2, 1000 / 2),
     '20': (1145 / 2, 1000 / 2)
 }
-CHIP_SELECTOR_POS = (155, 298)
+CHIP_SELECTOR_POS = (168, 295)
+STATUS_MSG_BASEPOS = (8, 258)
 
 
 class UthView(kengi.EvListener):
@@ -85,10 +86,10 @@ class UthView(kengi.EvListener):
 
         self._assets_rdy = False
         self._mod = model
-        self.small_ft = kengi.pygame.font.Font(None, 24)
+        self.small_ft = kengi.pygame.font.Font(None, 20)
         self.info_msg0 = None
         self.info_msg1 = None  # will be used to tell the player what he/she has to do!
-        self.info_msg2 = None
+        self.info_messages = list()
 
         self.scrsize = kengi.get_surface().get_size()
         self.midpt = [self.scrsize[0] // 2, self.scrsize[1] // 2]
@@ -98,10 +99,6 @@ class UthView(kengi.EvListener):
         # self._chips_related_wcontainer.set_debug_flag()
 
         self.chip_scr_pos = tuple(PLAYER_CHIPS['2a'])
-        #[
-        #    self._chips_related_wcontainer.get_pos()[0] + 11,
-        #    self._chips_related_wcontainer.get_pos()[1] - 25
-        #]
 
         self._mlabels = None
         self._do_set_money_labels()  # replace prev. line by a meaningful dict
@@ -134,7 +131,7 @@ class UthView(kengi.EvListener):
             'ante_etq': Label(MLABELS_POS['ante'], 'ante?', ftsize_mlabels),
             'blind_etq': Label(MLABELS_POS['blind'], 'blind?', ftsize_mlabels),
             'play_etq': Label(MLABELS_POS['play'], 'play?', ftsize_mlabels),
-            'cash_etq': Label(MLABELS_POS['cash'], 'cash?', ftsize_mlabels)
+            'cash_etq': Label(MLABELS_POS['cash'], 'cash?', 4+ftsize_mlabels)
         }
         # return wContainer(
         #     (32, self.midpt[1] + 66),
@@ -195,6 +192,8 @@ class UthView(kengi.EvListener):
 
     def show_anteselection(self):
         # ensure everything is reset
+        del self.info_messages[:]
+
         self._chips_related_wcontainer.set_active()
 
         self._act_related_wcontainer.set_active()
@@ -333,9 +332,12 @@ class UthView(kengi.EvListener):
             else:
                 infoh_dealer = self._mod.dealer_vhand.description
                 infoh_player = self._mod.player_vhand.description
-                self.info_msg1 = self.small_ft.render(
-                    f"Player: {infoh_player}; Dealer: {infoh_dealer}; You've lost {result} CR", False, self.TEXTCOLOR
-                )
+                self.info_messages = [
+                    self.small_ft.render(f"Dealer: {infoh_dealer}", False, self.TEXTCOLOR),
+                    self.small_ft.render(f"Player: {infoh_player}", False, self.TEXTCOLOR),
+                    self.small_ft.render(f"You lost {result} CR", False, self.TEXTCOLOR)
+                ]
+
         else:
             raise ValueError('MatchOver event contains a non-valid value for attrib "won". Received value:', ev.won)
 
@@ -386,17 +388,16 @@ class UthView(kengi.EvListener):
                 UthView.centerblit(refscr, x, CARD_SLOTS_POS[loc])
 
         # display all 3 prompt messages
-        rank = 0
-        BASEX = 10
+        offsety = 24
         if self.info_msg0:
-            refscr.blit(self.info_msg0, (BASEX, 10))
+            refscr.blit(self.info_msg0, STATUS_MSG_BASEPOS)
         if self.info_msg1:
             rank = 1
-            refscr.blit(self.info_msg1, (BASEX, 10 + 33 * rank))
+            refscr.blit(self.info_msg1, (STATUS_MSG_BASEPOS[0], STATUS_MSG_BASEPOS[1] + offsety * rank))
         else:
-            if hasattr(self, 'info_messages') and len(self.info_messages):
+            if len(self.info_messages):
                 for rank, e in enumerate(self.info_messages):
-                    refscr.blit(e, (BASEX, 10 + 33 * (rank+1)))
+                    refscr.blit(e, (STATUS_MSG_BASEPOS[0], STATUS_MSG_BASEPOS[1] + offsety * (rank+1)))
 
         self._chips_related_wcontainer.draw()
         # self._money_labels.draw()

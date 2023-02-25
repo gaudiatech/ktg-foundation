@@ -210,7 +210,7 @@ class UthModel(kengi.Emitter):
     def init_new_round(self):
         print('-------------model init new round --------------------')
         self.match_over = False
-        self.wallet.reset_bets(self.wallet.prev_victorious)
+        self.wallet.reset_bets(int(self.wallet.prev_victorious))
 
         del self.dealer_hand[:]
         del self.player_hand[:]

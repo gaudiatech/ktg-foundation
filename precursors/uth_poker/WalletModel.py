@@ -10,7 +10,6 @@ sauf si Ante a été "push" au préalable
 """
 import common
 
-
 kengi = common.kengi
 MyEvTypes = common.MyEvTypes
 
@@ -56,7 +55,15 @@ class WalletModel(kengi.Emitter):
         self.__curr_chip_val = newvalue
         self.pev(MyEvTypes.ChipUpdate, value=self.__curr_chip_val)
 
-    def stake_chip(self, trips=False):
+    def can_stack(self, trips=False):
+        if trips:
+            return self.__curr_chip_val <= self._wealth
+        else:
+            if (self._wealth - 2 * self.__curr_chip_val) < 0:
+                return False
+            return True
+
+    def stack_chip(self, trips=False):
         if trips:
             self.bets['trips'] += self.__curr_chip_val
             self.delta_wealth = self.__curr_chip_val
@@ -68,9 +75,14 @@ class WalletModel(kengi.Emitter):
         self._wealth -= self.delta_wealth
         self.pev(MyEvTypes.MoneyUpdate, value=self._wealth)
 
-    def reset_bets(self, collect_back):
-        if collect_back:
+    def reset_bets(self, collect_mode=0):
+        if collect_mode == 0:
+            pass
+        elif collect_mode == 1:
             clawback = self.bets['ante'] + self.bets['trips']
+            self._wealth += clawback
+        elif collect_mode == 2:
+            clawback = self.bets['ante'] + self.bets['trips'] + self.bets['trips']
             self._wealth += clawback
 
         for bslot in self.bets.keys():
@@ -161,7 +173,7 @@ class WalletModel(kengi.Emitter):
         self.prev_total_bet = sum(tuple(self.bets.values()))
         self.prev_victorious = 0
 
-        self.reset_bets(False)
+        self.reset_bets(0)
         self.pev(MyEvTypes.MoneyUpdate, value=self._wealth)
 
     def collect_case_victory(self):
@@ -185,19 +197,19 @@ class WalletModel(kengi.Emitter):
         """
         y = 0
         if winning_vhand.is_royal():
-            y += 50*x
+            y += 50 * x
         elif winning_vhand.is_straight() and winning_vhand.is_flush():  # straight Flush
-            y += 40*x
+            y += 40 * x
         elif winning_vhand.is_four_oak():
-            y += 30*x
+            y += 30 * x
         elif winning_vhand.is_full():
-            y += 8*x
+            y += 8 * x
         elif winning_vhand.is_flush():
             y += 7 * x
         elif winning_vhand.is_straight():
-            y += 4*x
+            y += 4 * x
         elif winning_vhand.is_trips():
-            y += 3*x
+            y += 3 * x
         return y
 
     @staticmethod
@@ -212,16 +224,16 @@ class WalletModel(kengi.Emitter):
         Straight/Suite              -> 1:1
         """
         if winning_vhand.is_royal():
-            return 500*x
+            return 500 * x
         # straight Flush detection
         if winning_vhand.is_straight() and winning_vhand.is_flush():
-            return 50*x
+            return 50 * x
         if winning_vhand.is_four_oak():
-            return 10*x
+            return 10 * x
         if winning_vhand.is_full():
-            return 3*x
+            return 3 * x
         if winning_vhand.is_flush():
-            return int(1.5*x)
+            return int(1.5 * x)
         if winning_vhand.is_straight():
             return x
         return 0

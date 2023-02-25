@@ -247,7 +247,7 @@ class UthView(kengi.EvListener):
         self.generic_wcontainer.set_active(False)
 
     def on_bet_reset(self, ev):
-        self._mod.wallet.reset_bets(True)
+        self._mod.wallet.reset_bets(2)
 
     def on_chip_update(self, ev):
         # replace image in the sprite
@@ -300,11 +300,13 @@ class UthView(kengi.EvListener):
                         # self.pev(MyEvTypes.StackChip, trips=True)
 
                         # but, until then:
-                        self._mod.wallet.stake_chip(True)
+                        if self._mod.wallet.can_stack(True):
+                            self._mod.wallet.stack_chip(True)
                     else:
                         # idem ..
                         # self.pev(MyEvTypes.StackChip, trips=False)
-                        self._mod.wallet.stake_chip()
+                        if self._mod.wallet.can_stack():
+                            self._mod.wallet.stack_chip()
 
             self.dragged_chip_pos = None
 
@@ -338,10 +340,11 @@ class UthView(kengi.EvListener):
             infoh_player = self._mod.player_vhand.description
             infoh_dealer = self._mod.dealer_vhand.description
             self.info_msg1 = None
+            result = self._mod.quantify_reward()  # can win due to Trips, even if its a Tie
             self.info_messages = [
                 self.pokergame_ft.render(f"Dealer: {infoh_dealer};", False, self.TEXTCOLOR),
                 self.pokergame_ft.render(f"Player: {infoh_player};", False, self.TEXTCOLOR),
-                self.pokergame_ft.render("Change: 0 CR", False, self.TEXTCOLOR),
+                self.pokergame_ft.render(f"Change: {result} CR", False, self.TEXTCOLOR),
             ]
 
         elif ev.won == 1:  # won indeed

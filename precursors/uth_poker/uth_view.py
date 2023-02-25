@@ -1,7 +1,7 @@
 import common
 from uth_model import PokerStates
 
-# aliases
+
 kengi = common.kengi
 pygame = kengi.pygame
 MyEvTypes = common.MyEvTypes
@@ -14,7 +14,6 @@ Label = kengi.gui.Label
 # constants
 CST_VSPACING_BT = 4
 CST_HSPACING_BT = 10  # buttons that are actual player controls, at every pokerstate
-
 OVERLAY_POS = (85, 35)
 CHIP_SIZE_PX = (33, 33)
 BACKGROUND_IMG_PATH = 'user_assets/pokerbackground3.png'
@@ -23,13 +22,17 @@ BASE_X_CARDS_DR = 326
 Y_CARDS_DRAWN = 132
 CRD_OFFSET = 43
 MLABELS_POS = {
-    'trips': (243, 173),
-
+    'trips': (243, 175),
+    'play': (231, 246),
     'ante': (214, 215),
     'blind': (258, 215),
-    'play': (231, 243),
 
     'cash': (10, 170),
+
+    'e_trips': (210, 175),
+    'e_play': (231, 234),
+    'e_ante': (214, 205),
+    'e_blind': (258, 205),
 }
 
 CARD_SLOTS_POS = {  # coords in pixel -> where to place cards/chips
@@ -56,6 +59,7 @@ MONEY_POS = {
     'raise5': (980 / 3, 875 / 3),
     'raise6': (986 / 3, 876 / 3)
 }
+
 PLAYER_CHIPS = {
     '2a': (238, 278),  # the only cst value used rn
 
@@ -82,11 +86,17 @@ class UthView(kengi.EvListener):
         self._my_assets = dict()
 
         self.chip_spr = dict()
-        self.chip_adhoc_image = None
+        self.adhoc_chip_spr = None
 
         self._assets_rdy = False
         self._mod = model
-        self.small_ft = kengi.pygame.font.Font(None, 20)
+
+        self.pokergame_ft = kengi.gfx.JsonBasedCfont(
+            'user_assets/capello-ft'
+        )  # EmbeddedCfont() #kengi.pygame.font.Font(None, 20)
+        # if local ctx
+        self.pokergame_ft.forcing_transparency = True
+
         self.info_msg0 = None
         self.info_msg1 = None  # will be used to tell the player what he/she has to do!
         self.info_messages = list()
@@ -97,10 +107,10 @@ class UthView(kengi.EvListener):
         self._chips_related_wcontainer = self._build_chips_related_gui()
 
         # self._chips_related_wcontainer.set_debug_flag()
-
         self.chip_scr_pos = tuple(PLAYER_CHIPS['2a'])
-
+        self._gui_labels = None
         self._mlabels = None
+        self._do_gui_labels()
         self._do_set_money_labels()  # replace prev. line by a meaningful dict
 
         self.act_deal_cards = None
@@ -124,48 +134,45 @@ class UthView(kengi.EvListener):
 
         self.on_money_update(None)  # force a 1st money update
 
-    def _do_set_money_labels(self):
-        ftsize_mlabels = 17
-        self._mlabels = {
-            'trips_etq': Label(MLABELS_POS['trips'], 'trips?', ftsize_mlabels),
-            'ante_etq': Label(MLABELS_POS['ante'], 'ante?', ftsize_mlabels),
-            'blind_etq': Label(MLABELS_POS['blind'], 'blind?', ftsize_mlabels),
-            'play_etq': Label(MLABELS_POS['play'], 'play?', ftsize_mlabels),
-            'cash_etq': Label(MLABELS_POS['cash'], 'cash?', 4+ftsize_mlabels)
+    def _do_gui_labels(self):
+        self._gui_labels = {
+            'trips_etq': Label(MLABELS_POS['e_trips'], 'Trips', None, replacemt_ft=self.pokergame_ft),
+            'ante_etq': Label(MLABELS_POS['e_ante'], 'Ante', None, replacemt_ft=self.pokergame_ft),
+            'blind_etq': Label(MLABELS_POS['e_blind'], 'Blind', None, replacemt_ft=self.pokergame_ft),
+            'play_etq': Label(MLABELS_POS['e_play'], 'Play', None, replacemt_ft=self.pokergame_ft),
         }
-        # return wContainer(
-        #     (32, self.midpt[1] + 66),
-        #     (128, 128),
-        #     wContainer.FLOW,
-        #     all_lbl,
-        #     spacing=2
-        # )
+
+    def _do_set_money_labels(self):
+        # ftsize_mlabels = 17
+        self._mlabels = {
+            # 'trips_etq': Label(MLABELS_POS['trips'], 'trips?', ftsize_mlabels),
+            'trips_etq': Label(MLABELS_POS['trips'], 'trips?', None, replacemt_ft=self.pokergame_ft),
+            'ante_etq': Label(MLABELS_POS['ante'], 'ante?', None, replacemt_ft=self.pokergame_ft),
+            'blind_etq': Label(MLABELS_POS['blind'], 'blind?', None, replacemt_ft=self.pokergame_ft),
+            'play_etq': Label(MLABELS_POS['play'], 'play?', None, replacemt_ft=self.pokergame_ft),
+            'cash_etq': Label(MLABELS_POS['cash'], 'cash?', None, replacemt_ft=self.pokergame_ft),  # 4+ftsize_mlabels
+        }
 
     def _build_chips_related_gui(self):  # TODO group with other obj so we have 1 panel dedicated to AnteSelection
-        # -----------------
-        # --- cycle right button
+        # - cycle right button
         def cb0():
             kengi.get_ev_manager().post(MyEvTypes.CycleChipval, upwards=True)
 
         cycle_r_button = kengi.gui.Button2(None, '>', (0, 0), callback=cb0)
 
-        # --- cycle left button
+        # - cycle left button
         def cb1():
             kengi.get_ev_manager().post(MyEvTypes.CycleChipval, upwards=False)
 
         cycle_l_button = kengi.gui.Button2(None, '<', (0, 0), callback=cb1)
 
         stake_button = kengi.gui.Button2(None, ' __+__ ', (0, 0), tevent=MyEvTypes.StackChip)
-        # -----------------
 
         chip_related_buttons = [
             cycle_l_button,
             stake_button,
             cycle_r_button,
         ]
-        # for b in chip_related_buttons:
-        #    b.set_active()
-
         targ_w = 140
         return wContainer(
             CHIP_SELECTOR_POS,
@@ -218,33 +225,17 @@ class UthView(kengi.EvListener):
     def hide_generic_gui(self):
         self.generic_wcontainer.set_active(False)
 
-    # def turn_on(self):
-    #     super().turn_on()
-    #     for b in self._chips_related_wcontainer.content:
-    #         b.turn_on()
-    #     for b in self._act_related_wcontainer.content:
-    #         b.turn_on()
-
-    # def turn_off(self):
-    #     super().turn_off()
-    #     for b in self._chips_related_wcontainer.content:
-    #         b.turn_off()
-    #     for b in self._act_related_wcontainer.content:
-    #         b.turn_off()
-
     def on_chip_update(self, ev):
-        print('[View] reception chipval update :::', ev.value)
-        self.chip_adhoc_image = self.chip_spr[str(ev.value)].image
+        # replace image in the sprite
+        self.adhoc_chip_spr = self.chip_spr[str(ev.value)]
 
     def _load_assets(self):
         self.bg = kengi.pygame.image.load(BACKGROUND_IMG_PATH)
         spr_sheet = kengi.gfx.JsonBasedSprSheet('user_assets/pxart-french-cards')
-        self._my_assets['card_back'] = spr_sheet[
-            'back-blue.png']  # pygame.transform.scale(spr_sheet['back-of-card.png'], CARD_SIZE_PX)
+        self._my_assets['card_back'] = spr_sheet['back-blue.png']
         for card_cod in StandardCard.all_card_codes():
             y = PokerHand.adhoc_mapping(card_cod[0]).lstrip('0') + card_cod[1].upper()  # convert card code to path
-            self._my_assets[card_cod] = spr_sheet[
-                f'{y}.png']  # pygame.transform.scale(spr_sheet[f'{y}.png'], CARD_SIZE_PX)
+            self._my_assets[card_cod] = spr_sheet[f'{y}.png']
         spr_sheet2 = kengi.gfx.JsonBasedSprSheet('user_assets/pokerchips')
 
         for chip_val_info in ('2a', '2b', '5', '10', '20'):
@@ -268,7 +259,7 @@ class UthView(kengi.EvListener):
             spr.rect.center = PLAYER_CHIPS[chip_val_info]
             self.chip_spr['2' if chip_val_info in ('2a', '2b') else chip_val_info] = spr
 
-        self.chip_adhoc_image = self.chip_spr[str(self._mod.get_chipvalue())].image
+        self.adhoc_chip_spr = self.chip_spr[str(self._mod.get_chipvalue())]
 
         self._assets_rdy = True
 
@@ -291,20 +282,20 @@ class UthView(kengi.EvListener):
         self._mlabels['blind_etq'].text = f'%d CR' % blindv
         self._mlabels['play_etq'].text = f'%d CR' % playv
 
-        self._mlabels['cash_etq'].text = f'wealth: %d CR' % x
+        self._mlabels['cash_etq'].text = f'Wealth: %d CR' % x
 
     def on_match_over(self, ev):
-        self.info_msg2 = self.small_ft.render('click once to restart', False, self.TEXTCOLOR)
+        self.info_msg2 = self.pokergame_ft.render('Click to restart', False, self.TEXTCOLOR)
 
         if ev.won == 0:  # tie
-            self.info_msg0 = self.small_ft.render('Its a Tie.', True, self.TEXTCOLOR)
+            self.info_msg0 = self.pokergame_ft.render('Its a Tie.', True, self.TEXTCOLOR)
             infoh_player = self._mod.player_vhand.description
             infoh_dealer = self._mod.dealer_vhand.description
             self.info_msg1 = None
             self.info_messages = [
-                self.small_ft.render(f"Dealer: {infoh_dealer};", False, self.TEXTCOLOR),
-                self.small_ft.render(f"Player: {infoh_player};", False, self.TEXTCOLOR),
-                self.small_ft.render("Change: 0 CR", False, self.TEXTCOLOR),
+                self.pokergame_ft.render(f"Dealer: {infoh_dealer};", False, self.TEXTCOLOR),
+                self.pokergame_ft.render(f"Player: {infoh_player};", False, self.TEXTCOLOR),
+                self.pokergame_ft.render("Change: 0 CR", False, self.TEXTCOLOR),
             ]
 
         elif ev.won == 1:  # won indeed
@@ -312,12 +303,12 @@ class UthView(kengi.EvListener):
             infoh_player = self._mod.player_vhand.description
             infoh_dealer = self._mod.dealer_vhand.description
             # msg = f"Player: {infoh_player}; Dealer: {infoh_dealer}; Change {result}$"
-            self.info_msg0 = self.small_ft.render('Victory!', False, self.TEXTCOLOR)
+            self.info_msg0 = self.pokergame_ft.render('Victory!', False, self.TEXTCOLOR)
             self.info_msg1 = None
             self.info_messages = [
-                self.small_ft.render(f"Dealer: {infoh_dealer};", False, self.TEXTCOLOR),
-                self.small_ft.render(f"Player: {infoh_player};", False, self.TEXTCOLOR),
-                self.small_ft.render(f"Change: {result} CR", False, self.TEXTCOLOR),
+                self.pokergame_ft.render(f"Dealer: {infoh_dealer};", False, self.TEXTCOLOR),
+                self.pokergame_ft.render(f"Player: {infoh_player};", False, self.TEXTCOLOR),
+                self.pokergame_ft.render(f"Change: {result} CR", False, self.TEXTCOLOR),
             ]
 
         elif ev.won == -1:  # lost
@@ -325,17 +316,17 @@ class UthView(kengi.EvListener):
                 msg = 'Player folded.'
             else:
                 msg = 'Defeat.'
-            self.info_msg0 = self.small_ft.render(msg, True, self.TEXTCOLOR)
+            self.info_msg0 = self.pokergame_ft.render(msg, True, self.TEXTCOLOR)
             result = self._mod.wallet.prev_total_bet
             if self._mod.player_folded:
-                self.info_msg1 = self.small_ft.render(f"You lost {result} CR", False, self.TEXTCOLOR)
+                self.info_msg1 = self.pokergame_ft.render(f"You lost {result} CR", False, self.TEXTCOLOR)
             else:
                 infoh_dealer = self._mod.dealer_vhand.description
                 infoh_player = self._mod.player_vhand.description
                 self.info_messages = [
-                    self.small_ft.render(f"Dealer: {infoh_dealer}", False, self.TEXTCOLOR),
-                    self.small_ft.render(f"Player: {infoh_player}", False, self.TEXTCOLOR),
-                    self.small_ft.render(f"You lost {result} CR", False, self.TEXTCOLOR)
+                    self.pokergame_ft.render(f"Dealer: {infoh_dealer}", False, self.TEXTCOLOR),
+                    self.pokergame_ft.render(f"Player: {infoh_player}", False, self.TEXTCOLOR),
+                    self.pokergame_ft.render(f"You lost {result} CR", False, self.TEXTCOLOR)
                 ]
 
         else:
@@ -354,6 +345,11 @@ class UthView(kengi.EvListener):
 
         # - do this for any PokerState!
         refscr.blit(self.overlay_spr, OVERLAY_POS)
+
+        # draw GUI labels...
+        for etq in self._gui_labels.values():
+            etq.draw()
+
         # draw ante, blind amounts, & the total cash
         for etq in self._mlabels.values():
             etq.draw()  # it has its pos inside the Label instance
@@ -362,16 +358,25 @@ class UthView(kengi.EvListener):
 
         # ---------- draw chip value if the phase is still "setante"
         if self._mod.stage == PokerStates.AnteSelection:
-            # - draw chips + buttons
-            for k, v in enumerate((2, 5, 10, 20)):
-                adhoc_spr = self.chip_spr[str(v)]
-                if v == 2:
-                    adhoc_spr.rect.center = PLAYER_CHIPS['2b']
-                refscr.blit(adhoc_spr.image, adhoc_spr.rect.topleft)
-            self.chip_spr['2'].rect.center = PLAYER_CHIPS['2a']
-            refscr.blit(self.chip_spr['2'].image, self.chip_spr['2'].rect.topleft)
 
-            UthView.centerblit(refscr, self.chip_adhoc_image, self.chip_scr_pos)
+            # - draw chips + buttons
+            # for k, v in enumerate((2, 5, 10, 20)):
+            #     adhoc_spr = self.chip_spr[str(v)]
+            #     if v == 2:
+            #         adhoc_spr.rect.center = PLAYER_CHIPS['2b']
+            #     refscr.blit(adhoc_spr.image, adhoc_spr.rect.topleft)
+            # self.chip_spr['2'].rect.center = PLAYER_CHIPS['2a']
+            # refscr.blit(self.chip_spr['2'].image, self.chip_spr['2'].rect.topleft)
+
+            # old :
+            # UthView.centerblit(refscr, self.adhoc_chip_spr, self.chip_scr_pos)
+
+            # new:
+            self.adhoc_chip_spr.rect.center = PLAYER_CHIPS['2a']
+            refscr.blit(self.adhoc_chip_spr.image, self.adhoc_chip_spr.rect.topleft)
+
+            # debug chip img
+            pygame.draw.rect(refscr, 'red', (self.adhoc_chip_spr.rect.topleft, self.adhoc_chip_spr.image.get_size()), 1)
 
             for b in self._act_related_wcontainer.content:
                 refscr.blit(b.image, b.get_pos())

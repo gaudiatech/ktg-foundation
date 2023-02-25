@@ -14,7 +14,6 @@ without you having any further betting options)
 #3 > In case you opt to check, the dealer will deal the turn & the river. This is the final betting round. This time,
 you can either: Fold / Bet 1x the ante. You cannot check anymore since the river is out.
 """
-import time
 import common
 from game_logic import AnteSelectionState, PreFlopState, FlopState, TurnRiverState, OutcomeState
 from uth_model import UthModel
@@ -40,9 +39,15 @@ class PokerUth(kengi.GameTpl):
         super().__init__()
         self.m = self.v = None
 
-    def enter(self, vms=None):
+    def init_video(self):
+        kengi.init(2)
+
+    def setup_ev_manager(self):
         self._manager = kengi.get_ev_manager()
         self._manager.setup(common.MyEvTypes)
+
+    def enter(self, vms=None):
+        super().enter(vms)
 
         kengi.declare_game_states(
             common.PokerStates,
@@ -61,30 +66,10 @@ class PokerUth(kengi.GameTpl):
         common.refview = self.v
         self.v.turn_on()
 
-    # def update(self, infot):
-    #     super().update(infot)
-    #     if self.gameover:
-    #         return WARP_BACK
-
 
 game_obj = PokerUth()
 common.refgame = game_obj
 # if not isinstance(common.dyncomp, common.DynComponent):  # only if katasdk is active
 #     katasdk.gkart_activation(game_obj)
 
-# -----------------
-# local ctx run
-if __name__ == '__main__':
-    kengi.init(2)
-
-    #
-    # - ok but this wont trigger GameStarts event
-    # ...
-    # game_obj.enter(None)  calls .enter()
-    # while not game_obj.gameover:
-    #     tmp = game_obj.update(time.time())
-    #     if tmp and tmp[0] == 2:
-    #         game_obj.gameover = True
-
-    game_obj.loop()
-    # game_obj.exit(None)
+game_obj.loop()

@@ -54,7 +54,6 @@ class WalletModel(kengi.Emitter):
     @curr_chipval.setter
     def curr_chipval(self, newvalue):
         self.__curr_chip_val = newvalue
-        print('wallet -> definition of chip val, it is now ...', newvalue)
         self.pev(MyEvTypes.ChipUpdate, value=self.__curr_chip_val)
 
     def stake_chip(self):
@@ -146,10 +145,7 @@ class WalletModel(kengi.Emitter):
         earnings['trips'] = d
 
         self.prev_earnings = sum(tuple(earnings.values()))
-        self.prev_gain = a+b+c+d
-
-        # _wealth will be updated when player restarts
-        # self.pev(MyEvTypes.MoneyUpdate, value=self._wealth)
+        self.prev_gain = sum((a, b, c, d))
         return 1
 
     def impact_fold(self):
@@ -199,15 +195,12 @@ class WalletModel(kengi.Emitter):
             y += 4*x
         elif winning_vhand.is_trips():
             y += 3*x
-        print('ajout p/r trips:', y)
         return y
 
     @staticmethod
     def comp_blind_payout(x, winning_vhand):
         """
-        ---------------
-        the "Blind" bet
-        ---------------
+        ---------------the "Blind" bet---------------
         Royal Flush/Quinte Royale   -> 500:1
         Straight Flush/Quinte       -> 50:1
         Four of a kind/Carré        -> 10:1
@@ -215,29 +208,20 @@ class WalletModel(kengi.Emitter):
         Flush/Couleur               -> 3:2 (x1.5)
         Straight/Suite              -> 1:1
         """
-        y = 0
         if winning_vhand.is_royal():
-            y += 500*x
-        elif winning_vhand.is_straight() and winning_vhand.is_flush():  # straight Flush
-            y += 50*x
-        elif winning_vhand.is_four_oak():
-            y += 10*x
-        elif winning_vhand.is_full():
-            y += 3*x
-        elif winning_vhand.is_flush():
-            y += int(1.5*x)
+            return 500*x
+        # straight Flush detection
+        if winning_vhand.is_straight() and winning_vhand.is_flush():
+            return 50*x
+        if winning_vhand.is_four_oak():
+            return 10*x
+        if winning_vhand.is_full():
+            return 3*x
+        if winning_vhand.is_flush():
+            return int(1.5*x)
         if winning_vhand.is_straight():
-            y += x
-        print('ajour p/r blind:', y)
-        return y
-
-    # def win_impact(self):
-    #     if self.recorded_outcome == 1:
-    #         self._cash += self.recorded_prize
-    #     if self.recorded_outcome > -1:
-    #         self._cash += self.ante + self.blind + self.playcost  # recup toutes les mises
-    #     self.ante = self.blind = self.play = 0  # reset play
-    #     self.pev(MyEvTypes.MoneyUpdate, value=self._cash)
+            return x
+        return 0
 
     def is_player_broke(self):
         """
@@ -245,31 +229,3 @@ class WalletModel(kengi.Emitter):
         :return: True/False
         """
         return self._wealth <= 0
-
-    # ---------------------
-    #  the 4 methods below compute future gain/loss
-    #  but without applying it
-    # ---------------------
-    @staticmethod
-    def compute_blind_multiplier(givenhand):
-        """
-        Calcul gain spécifique & relatif à la blinde
-        Royal flush- 500 pour 1
-        Straigth flush- 50 pour 1
-        Four of a kind - 10 pour 1
-        Full house - 3 pour 1
-        Flush - 1.5 pour 1
-        Suite - 1 pour 1
-        """
-        multiplicateur = {
-            'High Card': 0,
-            'One Pair': 0,
-            'Two Pair': 0,
-            'Three of a Kind': 0,
-            'Straight': 1,
-            'Flush': 1.5,
-            'Full House': 3,
-            'Four of a Kind': 10,
-            'Straight Flush': 50
-        }[givenhand.description]
-        return multiplicateur

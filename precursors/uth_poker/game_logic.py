@@ -33,12 +33,11 @@ class AnteSelectionCtrl(kengi.EvListener):
         self.autoplay = False
         self._last_t = None
 
-    def on_bet_reset(self, ev):
-        self._mod.wallet.unstake_all()
+    # Done directly in the View...
+    # maybe we will refactor this again once we have poker Backend written..
 
-    def on_stack_chip(self, ev):
-        print('add chip!')
-        self._mod.wallet.stake_chip()
+    # def on_stack_chip(self, ev):
+    #     self._mod.wallet.stake_chip(True)
 
     def on_cycle_chipval(self, ev):
         chval = self._mod.get_chipvalue()

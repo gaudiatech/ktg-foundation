@@ -56,25 +56,31 @@ class WalletModel(kengi.Emitter):
         self.__curr_chip_val = newvalue
         self.pev(MyEvTypes.ChipUpdate, value=self.__curr_chip_val)
 
-    def stake_chip(self):
-        self.bets['ante'] += self.__curr_chip_val
-        self.bets['blind'] += self.__curr_chip_val
-        self.delta_wealth = 2 * self.__curr_chip_val
+    def stake_chip(self, trips=False):
+        if trips:
+            self.bets['trips'] += self.__curr_chip_val
+            self.delta_wealth = self.__curr_chip_val
+        else:
+            self.bets['ante'] += self.__curr_chip_val
+            self.bets['blind'] += self.__curr_chip_val
+            self.delta_wealth = 2 * self.__curr_chip_val
+
         self._wealth -= self.delta_wealth
         self.pev(MyEvTypes.MoneyUpdate, value=self._wealth)
 
-    def unstake_all(self):
-        # equivalent a un reset de l'etat du bet, lors de la SETANTE_PHASE
-        r = self.bets['ante'] + self.bets['blind'] + self.bets['trips']
-        self._reset_bets()
-        y = self._wealth
-        self._wealth += r
-        if y != self._wealth:
-            self.pev(MyEvTypes.MoneyUpdate, value=self._wealth)
+    def reset_bets(self, collect_back):
+        if collect_back:
+            clawback = self.bets['ante'] + self.bets['trips']
+            self._wealth += clawback
 
-    def reset(self):
         for bslot in self.bets.keys():
             self.bets[bslot] = 0
+
+        self.pev(MyEvTypes.MoneyUpdate, value=self._wealth)
+
+    # def reset(self):
+    #     for bslot in self.bets.keys():
+    #         self.bets[bslot] = 0
 
     def select_trips(self, val):
         self.bets['trips'] = val
@@ -97,10 +103,6 @@ class WalletModel(kengi.Emitter):
         self.bets['play'] = multiplier * self.bets['ante']
         self._wealth -= self.bets['play']
         self.pev(MyEvTypes.MoneyUpdate, value=self._wealth)
-
-    def _reset_bets(self):
-        for bslot in self.bets.keys():
-            self.bets[bslot] = 0
 
     def resolve(self, pl_vhand, dealer_vhand):
         """
@@ -139,8 +141,9 @@ class WalletModel(kengi.Emitter):
         earnings['play'] += a
         b = earnings['ante']
         earnings['ante'] += b
-        c = WalletModel.comp_blind_payout(self.bets['blind'], winner_vhand)
-        earnings['blind'] += c
+
+        earnings['blind'] = c = WalletModel.comp_blind_payout(self.bets['blind'], winner_vhand)
+
         d = WalletModel.comp_trips_payout(self.bets['trips'], winner_vhand)
         earnings['trips'] = d
 
@@ -158,7 +161,7 @@ class WalletModel(kengi.Emitter):
         self.prev_total_bet = sum(tuple(self.bets.values()))
         self.prev_victorious = 0
 
-        self._reset_bets()
+        self.reset_bets(False)
         self.pev(MyEvTypes.MoneyUpdate, value=self._wealth)
 
     def collect_case_victory(self):

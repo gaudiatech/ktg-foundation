@@ -49,7 +49,7 @@ PokerStates = kengi.struct.enum(
 )
 
 MyEvTypes = kengi.game_events_enum((
-    'StackChip',  # used to bet in an incremental way
+    'StackChip',  # used to bet in an incremental way, contains: trips(True/False)
     'CycleChipval',  # contains: upwards(int: 1 or 0), to answer 'do we cycle 2->5->10->... or the other way around?'
 
     # - IMPACT from buttons in AnteSelectionState

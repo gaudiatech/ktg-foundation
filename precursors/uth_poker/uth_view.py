@@ -35,6 +35,11 @@ MLABELS_POS = {
     'e_blind': (258, 205),
 }
 
+DIM_DROPZONES = [
+    (70, 30),
+    (112, 24)
+]
+
 CARD_SLOTS_POS = {  # coords in pixel -> where to place cards/chips
     'dealer1': (241, 60),
     'dealer2': (241 + CRD_OFFSET, 60),
@@ -79,6 +84,20 @@ class UthView(kengi.EvListener):
 
     def __init__(self, model):
         super().__init__()
+        self.debug_drag_n_drop = False
+
+        self._rect_dropzone_li = [
+            pygame.Rect(MLABELS_POS['trips'], DIM_DROPZONES[0]),
+            pygame.Rect((0, 0), DIM_DROPZONES[1])
+        ]
+        # adjust drop zones
+        self._rect_dropzone_li[0].top -= 10
+        self._rect_dropzone_li[0].left -= 8
+        self._rect_dropzone_li[1].topleft = MLABELS_POS['ante']
+        self._rect_dropzone_li[1].top -= 5
+        for dzo in self._rect_dropzone_li:
+            dzo.left -= 8
+
         self.overlay_spr = pygame.image.load('user_assets/overlay0.png')
         self.overlay_spr.set_colorkey((255, 0, 255))
 
@@ -87,6 +106,7 @@ class UthView(kengi.EvListener):
 
         self.chip_spr = dict()
         self.adhoc_chip_spr = None
+        self.dragged_chip_pos = None
 
         self._assets_rdy = False
         self._mod = model
@@ -166,11 +186,12 @@ class UthView(kengi.EvListener):
 
         cycle_l_button = kengi.gui.Button2(None, '<', (0, 0), callback=cb1)
 
-        stake_button = kengi.gui.Button2(None, ' __+__ ', (0, 0), tevent=MyEvTypes.StackChip)
+        # disabled this, since Drag N Drop is working now
+        # stake_button = kengi.gui.Button2(None, ' __+__ ', (0, 0), tevent=MyEvTypes.StackChip)
 
         chip_related_buttons = [
             cycle_l_button,
-            stake_button,
+            # stake_button,
             cycle_r_button,
         ]
         targ_w = 140
@@ -225,6 +246,9 @@ class UthView(kengi.EvListener):
     def hide_generic_gui(self):
         self.generic_wcontainer.set_active(False)
 
+    def on_bet_reset(self, ev):
+        self._mod.wallet.reset_bets(True)
+
     def on_chip_update(self, ev):
         # replace image in the sprite
         self.adhoc_chip_spr = self.chip_spr[str(ev.value)]
@@ -247,8 +271,7 @@ class UthView(kengi.EvListener):
                 '20': 'chip20.png'
             }[chip_val_info]  # adapt filename
 
-            # no chip rescaling:
-            # tempimg = spr_sheet2[y]
+            # no chip rescaling : tempimg = spr_sheet2[y]
             # chip rescaling:
             tempimg = pygame.transform.scale(spr_sheet2[y], CHIP_SIZE_PX)
             tempimg.set_colorkey((255, 0, 255))
@@ -260,18 +283,41 @@ class UthView(kengi.EvListener):
             self.chip_spr['2' if chip_val_info in ('2a', '2b') else chip_val_info] = spr
 
         self.adhoc_chip_spr = self.chip_spr[str(self._mod.get_chipvalue())]
-
         self._assets_rdy = True
+
+    def on_mousedown(self, ev):
+        if self.adhoc_chip_spr.rect.collidepoint(
+                kengi.vscreen.proj_to_vscreen(ev.pos)
+        ):
+            self.dragged_chip_pos = list(self.adhoc_chip_spr.rect.center)
+
+    def on_mouseup(self, ev):
+        if self.dragged_chip_pos:
+            for k, dzo in enumerate(self._rect_dropzone_li):
+                if dzo.collidepoint(self.dragged_chip_pos):
+                    if k == 0:
+                        # if we ever hav a poker backend..
+                        # self.pev(MyEvTypes.StackChip, trips=True)
+
+                        # but, until then:
+                        self._mod.wallet.stake_chip(True)
+                    else:
+                        # idem ..
+                        # self.pev(MyEvTypes.StackChip, trips=False)
+                        self._mod.wallet.stake_chip()
+
+            self.dragged_chip_pos = None
+
+    def on_mousemotion(self, ev):
+        if self.dragged_chip_pos:
+            self.dragged_chip_pos[0], self.dragged_chip_pos[1] = kengi.vscreen.proj_to_vscreen(ev.pos)
 
     def on_money_update(self, ev):
         if self._act_related_wcontainer.active:
             bv = self._mod.wallet.bets['ante'] > 0
-            for i in range(1, 4):
-                self._act_related_wcontainer.content[i].set_enabled(bv)  # all buttons except BetIdem
+            for i in range(1, 4):  # all buttons except BetIdem
+                self._act_related_wcontainer.content[i].set_enabled(bv)
         self._refresh_money_labels()
-
-    # def on_new_match(self, ev):
-    #     self._refresh_money_labels()
 
     def _refresh_money_labels(self):
         tripsv, antev, blindv, playv = self._mod.get_all_bets()
@@ -337,9 +383,12 @@ class UthView(kengi.EvListener):
         w, h = surf.get_size()
         refscr.blit(surf, (p[0] - w // 2, p[1] - h // 2))
 
-    def _paint(self, refscr):
-        refscr.fill('darkgreen')
+    def on_paint(self, ev):
+        if not self._assets_rdy:
+            self._load_assets()
+        refscr = ev.screen
 
+        refscr.fill('darkgreen')
         # affiche mains du dealer +decor casino
         refscr.blit(self.bg, (0, 0))
 
@@ -359,27 +408,22 @@ class UthView(kengi.EvListener):
         # ---------- draw chip value if the phase is still "setante"
         if self._mod.stage == PokerStates.AnteSelection:
 
-            # - draw chips + buttons
-            # for k, v in enumerate((2, 5, 10, 20)):
-            #     adhoc_spr = self.chip_spr[str(v)]
-            #     if v == 2:
-            #         adhoc_spr.rect.center = PLAYER_CHIPS['2b']
-            #     refscr.blit(adhoc_spr.image, adhoc_spr.rect.topleft)
-            # self.chip_spr['2'].rect.center = PLAYER_CHIPS['2a']
-            # refscr.blit(self.chip_spr['2'].image, self.chip_spr['2'].rect.topleft)
-
-            # old :
-            # UthView.centerblit(refscr, self.adhoc_chip_spr, self.chip_scr_pos)
-
-            # new:
             self.adhoc_chip_spr.rect.center = PLAYER_CHIPS['2a']
             refscr.blit(self.adhoc_chip_spr.image, self.adhoc_chip_spr.rect.topleft)
 
-            # debug chip img
-            pygame.draw.rect(refscr, 'red', (self.adhoc_chip_spr.rect.topleft, self.adhoc_chip_spr.image.get_size()), 1)
+            # -- debug chip img & dropzones {{
+            if self.debug_drag_n_drop:
+                pygame.draw.rect(refscr, 'red', (self.adhoc_chip_spr.rect.topleft, self.adhoc_chip_spr.image.get_size()), 1)
+                for dzo in self._rect_dropzone_li:
+                    pygame.draw.rect(refscr, 'orange', dzo, 1)
+                for b in self._act_related_wcontainer.content:
+                    refscr.blit(b.image, b.get_pos())
+            # }}
 
-            for b in self._act_related_wcontainer.content:
-                refscr.blit(b.image, b.get_pos())
+            # draw the drag n drop Chip
+            if self.dragged_chip_pos:
+                UthView.centerblit(ev.screen, self.adhoc_chip_spr.image, self.dragged_chip_pos)
+
         else:
             # ----------------
             #  draw all cards
@@ -402,14 +446,9 @@ class UthView(kengi.EvListener):
         else:
             if len(self.info_messages):
                 for rank, e in enumerate(self.info_messages):
-                    refscr.blit(e, (STATUS_MSG_BASEPOS[0], STATUS_MSG_BASEPOS[1] + offsety * (rank+1)))
+                    refscr.blit(e, (STATUS_MSG_BASEPOS[0], STATUS_MSG_BASEPOS[1] + offsety * (rank + 1)))
 
         self._chips_related_wcontainer.draw()
         # self._money_labels.draw()
         self._act_related_wcontainer.draw()
         self.generic_wcontainer.draw()  # will be drawn or no, depending on if its active!
-
-    def on_paint(self, ev):
-        if not self._assets_rdy:
-            self._load_assets()
-        self._paint(ev.screen)
